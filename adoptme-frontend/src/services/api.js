@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://adoptme-api-m0ei.onrender.com/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
+//'https://adoptme-api-m0ei.onrender.com/api'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -26,10 +27,8 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Token expired or invalid
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      // Optional: window.location.href = '/login'; or trigger logout state
     }
     return Promise.reject(error);
   }
@@ -41,13 +40,11 @@ api.interceptors.response.use(
 
 export const authService = {
   login: async (credentials) => {
-    // credentials: { email, password }
     const response = await api.post('/auth/login', credentials);
-    return response.data; // { token, userId, email }
+    return response.data;
   },
 
   register: async (userData) => {
-    // userData: { username, email, password, zipCode, firstName, lastName }
     const response = await api.post('/users/create', userData);
     return response.data;
   },
@@ -74,9 +71,8 @@ export const userService = {
 };
 
 export const animalService = {
-  searchAnimals: async (filterParams = {}) => {
-    // filterParams: { species, breed, minAge, maxAge, zipCode, etc. }
-    const response = await api.post('/animals/search', filterParams);
+  searchAnimals: async (filterParams = {}, page = 0, size = 16) => {
+    const response = await api.post(`/animals/search?page=${page}&size=${size}`, filterParams);
     return response.data;
   },
 

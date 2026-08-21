@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, PawPrint, Navigation2 } from 'lucide-react';
+import { Loader2, PawPrint, Navigation2, ChevronLeft, ChevronRight } from 'lucide-react';
 import FilterBar from '../components/FilterBar';
 import PetCard from '../components/PetCard';
 import PetMap from '../components/PetMap';
 import PetModal from '../components/PetModal';
 import { useAuth } from '../context/AuthContext';
-import api from '../services/api';
+import api, { animalService } from '../services/api';
 
 const SHELTER_COORDS = {
   1: { lat: 39.4397, lng: -77.9402 },
@@ -33,6 +33,11 @@ export default function ExplorePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [userCoords, setUserCoords] = useState(null);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
 
   const [filters, setFilters] = useState({
     name: '',
@@ -85,48 +90,80 @@ export default function ExplorePage() {
     fetchZipCoords();
   }, [filters.zipCode]);
 
-  const fetchAnimals = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const fetchAnimals = useCallback(
+    async (pageToFetch = 0) => {
+      setLoading(true);
+      setError('');
 
-    const payload = {};
-    if (filters.name?.trim()) payload.name = filters.name.trim();
-    if (filters.breed?.trim()) payload.breed = filters.breed.trim();
-    if (filters.species) payload.species = filters.species;
-    if (filters.gender) payload.gender = filters.gender;
-    if (filters.size) payload.size = filters.size;
-    if (filters.minAge) payload.minAge = Number(filters.minAge);
-    if (filters.maxAge) payload.maxAge = Number(filters.maxAge);
-    if (filters.goodWithKids) payload.goodWithKids = true;
-    if (filters.goodWithDogs) payload.goodWithDogs = true;
-    if (filters.goodWithCats) payload.goodWithCats = true;
+      const payload = {};
+      if (filters.name?.trim()) payload.name = filters.name.trim();
+      if (filters.breed?.trim()) payload.breed = filters.breed.trim();
+      if (filters.species) payload.species = filters.species;
+      if (filters.gender) payload.gender = filters.gender;
+      if (filters.size) payload.size = filters.size;
+      if (filters.minAge) payload.minAge = Number(filters.minAge);
+      if (filters.maxAge) payload.maxAge = Number(filters.maxAge);
+      if (filters.goodWithKids) payload.goodWithKids = true;
+      if (filters.goodWithDogs) payload.goodWithDogs = true;
+      if (filters.goodWithCats) payload.goodWithCats = true;
+      if (filters.zipCode?.trim()) payload.zipCode = filters.zipCode.trim();
+      if (filters.radius) payload.radiusMiles = parseFloat(filters.radius);
 
-    try {
-      const res = await api.post('/animals/search', payload);
-      setRawAnimals(Array.isArray(res.data) ? res.data : []);
-    } catch (err) {
-      console.error('Failed to load animals:', err);
-      setError('Unable to load animals from backend server.');
-      setRawAnimals([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    filters.name,
-    filters.breed,
-    filters.species,
-    filters.gender,
-    filters.size,
-    filters.minAge,
-    filters.maxAge,
-    filters.goodWithKids,
-    filters.goodWithDogs,
-    filters.goodWithCats,
-  ]);
+      try {
+        const data = await animalService.searchAnimals(payload, pageToFetch, 16);
+        
+        // Handle Spring Data Page object response
+        if (data && data.content) {
+          setRawAnimals(data.content);
+          setTotalPages(data.totalPages || 0);
+          setTotalElements(data.totalElements || 0);
+          setCurrentPage(data.number || 0);
+        } else if (Array.isArray(data)) {
+          // Fallback if returned as raw array
+          setRawAnimals(data);
+          setTotalPages(1);
+          setTotalElements(data.length);
+          setCurrentPage(0);
+        } else {
+          setRawAnimals([]);
+          setTotalPages(0);
+          setTotalElements(0);
+        }
+      } catch (err) {
+        console.error('Failed to load animals:', err);
+        setError('Unable to load animals from backend server.');
+        setRawAnimals([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      filters.name,
+      filters.breed,
+      filters.species,
+      filters.gender,
+      filters.size,
+      filters.minAge,
+      filters.maxAge,
+      filters.goodWithKids,
+      filters.goodWithDogs,
+      filters.goodWithCats,
+      filters.zipCode,
+      filters.radius,
+    ]
+  );
 
+  // Trigger search on filter update and reset back to page 0
   useEffect(() => {
-    fetchAnimals();
+    setCurrentPage(0);
+    fetchAnimals(0);
   }, [fetchAnimals]);
+
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    fetchAnimals(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const filteredAnimals = useMemo(() => {
     return rawAnimals
@@ -191,8 +228,8 @@ export default function ExplorePage() {
 
   const handleSelectAnimal = async (animal) => {
     try {
-      const res = await api.get(`/animals/${animal.id}`);
-      setSelectedPet(res.data);
+      const res = await animalService.getAnimalById(animal.id);
+      setSelectedPet(res);
     } catch {
       setSelectedPet(animal);
     }
@@ -231,7 +268,7 @@ export default function ExplorePage() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
           {/* Pet Cards Feed */}
-          <div className="lg:col-span-7">
+          <div className="lg:col-span-7 flex flex-col space-y-4">
             {loading ? (
               <div className="flex h-64 items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
@@ -251,20 +288,53 @@ export default function ExplorePage() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {filteredAnimals.map((animal) => (
-                  <PetCard
-                    key={animal.id}
-                    animal={animal}
-                    onSelect={() => handleSelectAnimal(animal)}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {filteredAnimals.map((animal) => (
+                    <PetCard
+                      key={animal.id}
+                      animal={animal}
+                      onSelect={() => handleSelectAnimal(animal)}
+                    />
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/60 shadow-sm mt-4">
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(Math.max(currentPage - 1, 0))}
+                      disabled={currentPage === 0 || loading}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/80 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                      Previous
+                    </button>
+
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Page <strong className="font-bold text-slate-900 dark:text-white">{currentPage + 1}</strong> of{' '}
+                      <strong className="font-bold text-slate-900 dark:text-white">{Math.max(totalPages, 1)}</strong>
+                      {totalElements > 0 && ` (${totalElements} pets)`}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages - 1))}
+                      disabled={currentPage >= totalPages - 1 || loading}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/80 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      Next
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           {/* Map View */}
-          <div className="lg:col-span-5 lg:sticky lg:top-24 h-[560px]">
+          <div className="lg:col-span-5 lg:sticky lg:top-24 h-140">
             <PetMap animals={filteredAnimals} onSelectAnimal={handleSelectAnimal} />
           </div>
         </div>

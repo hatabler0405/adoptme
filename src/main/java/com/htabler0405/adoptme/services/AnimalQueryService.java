@@ -5,11 +5,15 @@ import com.htabler0405.adoptme.entities.AnimalProfile;
 import com.htabler0405.adoptme.repositories.AnimalProfileRepository;
 import jakarta.persistence.criteria.Predicate;
 import org.locationtech.jts.geom.Point;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,7 +29,7 @@ public class AnimalQueryService {
     }
 
     @Transactional(readOnly = true)
-    public List<AnimalProfile> filterAnimals(AnimalFilterRequest filter) {
+    public Page<AnimalProfile> filterAnimals(AnimalFilterRequest filter, Pageable pageable) {
         Specification<AnimalProfile> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -57,8 +61,6 @@ public class AnimalQueryService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        List<AnimalProfile> result = animalRepository.findAll(spec);
-
         Double userLat = filter.getLatitude();
         Double userLng = filter.getLongitude();
 
@@ -71,16 +73,22 @@ public class AnimalQueryService {
         }
 
         if (userLat != null && userLng != null && filter.getRadiusMiles() != null) {
+            List<AnimalProfile> allMatches = animalRepository.findAll(spec);
             double finalLat = userLat;
             double finalLng = userLng;
             double maxMiles = filter.getRadiusMiles();
 
-            result = result.stream()
+            List<AnimalProfile> filteredList = allMatches.stream()
                     .filter(animal -> isWithinRadius(animal, finalLat, finalLng, maxMiles))
                     .toList();
+            int start = (int) pageable.getOffset();
+            int end = Math.min((start + pageable.getPageSize()), filteredList.size());
+            
+            List<AnimalProfile> pageContent = (start <= end) ? filteredList.subList(start, end) : Collections.emptyList();
+            return new PageImpl<>(pageContent, pageable, filteredList.size());
         }
 
-        return result;
+        return animalRepository.findAll(spec, pageable);
     }
 
     @Transactional(readOnly = true)
