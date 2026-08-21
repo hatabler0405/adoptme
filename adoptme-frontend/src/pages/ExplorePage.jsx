@@ -6,6 +6,7 @@ import PetMap from '../components/PetMap';
 import PetModal from '../components/PetModal';
 import { useAuth } from '../context/AuthContext';
 import api, { animalService } from '../services/api';
+import { useLocation } from 'react-router-dom';
 
 const SHELTER_COORDS = {
   1: { lat: 39.4397, lng: -77.9402 },
@@ -28,6 +29,7 @@ function calculateDistanceMiles(lat1, lon1, lat2, lon2) {
 
 export default function ExplorePage() {
   const { user } = useAuth();
+  const location = useLocation();
   const [rawAnimals, setRawAnimals] = useState([]);
   const [selectedPet, setSelectedPet] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -53,6 +55,16 @@ export default function ExplorePage() {
     goodWithDogs: false,
     goodWithCats: false,
   });
+
+  useEffect(() => {
+    if (location.state?.breed) {
+      setFilters((prev) => ({
+        ...prev,
+        breed: location.state.breed,
+        species: location.state.species ? location.state.species.toLowerCase() : prev.species,
+      }));
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (user?.zipCode) {

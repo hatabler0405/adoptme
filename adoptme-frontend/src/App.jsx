@@ -7,6 +7,7 @@ import SheltersDirectoryPage from './pages/SheltersDirectoryPage';
 import ShelterDetailsPage from './pages/ShelterDetailsPage';
 import FavoritesPage from './pages/FavoritesPage';
 import SettingsPage from './pages/SettingsPage';
+import BreedsPage from './pages/BreedsPage';
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/shelters" element={<SheltersDirectoryPage />} />
           <Route path="/shelters/:shelterId" element={<ShelterDetailsPage />} />
           <Route path="/favorites" element={<FavoritesPage />} />
+          <Route path="/breeds" element={<BreedsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

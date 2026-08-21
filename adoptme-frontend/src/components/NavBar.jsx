@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { PawPrint, Heart, Building2, Compass, LogOut } from 'lucide-react';
+import { PawPrint, Heart, Building2, Compass, LogOut, BookOpen } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useFavorites } from '../context/FavoritesContext';
 
@@ -37,6 +37,11 @@ export default function Navbar() {
             <span>Explore</span>
           </NavLink>
 
+          <NavLink to="/breeds" className={navLinkClass}>
+            <BookOpen className="h-4 w-4" />
+            <span>Breeds</span>
+          </NavLink>
+
           <NavLink to="/shelters" className={navLinkClass}>
             <Building2 className="h-4 w-4" />
             <span>Shelters</span>
@@ -59,7 +64,7 @@ export default function Navbar() {
                 <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-600/20 text-blue-600 dark:bg-blue-600/30 dark:text-blue-400 font-bold text-[11px]">
                   {displayName[0].toUpperCase()}
                 </div>
-                <span className="max-w-[120px] truncate">{displayName}</span>
+                <span className="max-w-30 truncate">{displayName}</span>
               </Link>
 
               <button
