@@ -16,6 +16,7 @@ export default function App() {
       <main className="flex-1">
         <Routes>
           <Route path="/" element={<ExplorePage />} />
+          <Route path="/explore" element={<ExplorePage />} />
           <Route path="/shelters" element={<SheltersDirectoryPage />} />
           <Route path="/shelters/:shelterId" element={<ShelterDetailsPage />} />
           <Route path="/favorites" element={<FavoritesPage />} />

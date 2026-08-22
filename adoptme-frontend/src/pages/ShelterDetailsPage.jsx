@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Building2, MapPin, Phone, Mail, Globe, Clock, ArrowLeft, PawPrint, Loader2 } from 'lucide-react';
+import { Building2, MapPin, Phone, Mail, Globe, Clock, ArrowLeft, PawPrint, Loader2, FileText, ExternalLink } from 'lucide-react';
 import PetCard from '../components/PetCard';
 import PetModal from '../components/PetModal';
 import ShelterReviews from '../components/ShelterReviews';
@@ -40,6 +40,7 @@ export default function ShelterDetailsPage() {
       shelterAddress: shelter.address || shelter.location,
       shelterPhone: shelter.phoneNumber || shelter.phone,
       shelterEmail: shelter.email,
+      adoptionUrl: shelter.adoptionListingsUrl || shelter.adoptionUrl,
     }));
   }, [shelter]);
 
@@ -69,6 +70,7 @@ export default function ShelterDetailsPage() {
   }
 
   const phone = shelter.phoneNumber || shelter.phone;
+  const applicationUrl = shelter.adoptionListingsUrl || shelter.adoptionUrl;
 
   return (
     <>
@@ -104,11 +106,29 @@ export default function ShelterDetailsPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap sm:flex-col gap-2.5 shrink-0">
+            <div className="flex flex-col gap-2.5 shrink-0 sm:min-w-50">
+              {/* Adoption Application Button or Fallback */}
+              {applicationUrl ? (
+                <a
+                  href={applicationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-colors"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>Adoption Application Form</span>
+                  <ExternalLink className="h-3.5 w-3.5 opacity-80" />
+                </a>
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center text-[11px] font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+                  Sorry, we don't have the link for the application form at this time.
+                </div>
+              )}
+
               {phone && (
                 <a
                   href={`tel:${phone}`}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-colors"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition-colors"
                 >
                   <Phone className="h-4 w-4" />
                   <span>Call Shelter</span>
@@ -117,7 +137,7 @@ export default function ShelterDetailsPage() {
               {shelter.email && (
                 <a
                   href={`mailto:${shelter.email}`}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition-colors"
                 >
                   <Mail className="h-4 w-4" />
                   <span>Send Email</span>
@@ -128,7 +148,7 @@ export default function ShelterDetailsPage() {
                   href={shelter.websiteUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-blue-600 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800 dark:text-blue-400 transition-colors"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800 dark:text-blue-400 transition-colors"
                 >
                   <Globe className="h-4 w-4" />
                   <span>Website</span>

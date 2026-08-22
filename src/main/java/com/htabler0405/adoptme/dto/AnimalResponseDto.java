@@ -33,6 +33,7 @@ public class AnimalResponseDto {
     private String shelterName;
     private Double shelterLatitude;
     private Double shelterLongitude;
+    private String adoptionUrl;
 
     public AnimalResponseDto(AnimalProfile animal) {
         this.id = animal.getId();
@@ -53,6 +54,7 @@ public class AnimalResponseDto {
         if (shelter != null) {
             this.shelterId = shelter.getId();
             this.shelterName = shelter.getName();
+            this.adoptionUrl = shelter.getAdoptionListingsUrl();
             
             if (shelter.getLocation() != null && animal.getShelter().getLocation() != null) {
                 this.shelterLongitude = shelter.getLocation().getCoordinate().x;

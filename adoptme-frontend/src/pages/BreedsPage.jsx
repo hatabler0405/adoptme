@@ -22,7 +22,12 @@ export default function BreedsPage() {
   }, [searchTerm, selectedSpecies, hypoOnly]);
 
   const handleSearchAdoptable = (breedName, species) => {
-    navigate('/explore', { state: { breed: breedName, species: species.toLowerCase() } });
+    navigate('/explore', { 
+      state: { 
+        breed: breedName, 
+        species: species ? species.toLowerCase() : '' 
+      } 
+    });
   };
 
   return (

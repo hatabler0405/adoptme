@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Heart, MapPin, Check, Phone, Mail, Building2, Loader2 } from 'lucide-react';
+import { X, Heart, MapPin, Check, Phone, Mail, Building2, Loader2, FileText, ExternalLink } from 'lucide-react';
 import { useFavorites } from '../context/FavoritesContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -96,6 +96,7 @@ export default function PetModal({ animal, isOpen, onClose }) {
   const shelterLocation = fullAnimal.shelterAddress || fullAnimal.location || fullAnimal.shelter?.location || fullAnimal.shelter?.address || fallback.address;
   const shelterPhone = fullAnimal.shelterPhone || fullAnimal.shelter?.phoneNumber || fullAnimal.shelter?.phone || fallback.phoneNumber;
   const shelterEmail = fullAnimal.shelterEmail || fullAnimal.shelter?.email || fallback.email;
+  const adoptionUrl = fullAnimal.adoptionUrl || fullAnimal.adoptionListingsUrl || fullAnimal.shelter?.adoptionListingsUrl;
 
   const goodWithKids = fullAnimal.goodWithKids ?? fullAnimal.goodWithChildren ?? null;
   const goodWithDogs = fullAnimal.goodWithDogs ?? null;
@@ -228,8 +229,28 @@ export default function PetModal({ animal, isOpen, onClose }) {
               </p>
             </div>
 
+            {/* Adoption Application Call-To-Action Banner */}
+            <div className="mt-6">
+              {adoptionUrl ? (
+                <a
+                  href={adoptionUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-700 transition cursor-pointer"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>Adoption Application Form</span>
+                  <ExternalLink className="h-4 w-4 opacity-80" />
+                </a>
+              ) : (
+                <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+                  Sorry, we don't have the link for the application form at this time.
+                </div>
+              )}
+            </div>
+
             {/* Shelter Footer & Contact */}
-            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-[#070d1e]">
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-[#070d1e]">
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
@@ -250,7 +271,7 @@ export default function PetModal({ animal, isOpen, onClose }) {
                 {shelterEmail && (
                   <a
                     href={`mailto:${shelterEmail}?subject=Adoption Inquiry: ${petName}`}
-                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition"
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-slate-200 px-4 py-2 text-xs font-bold text-slate-800 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition"
                   >
                     <Mail className="h-3.5 w-3.5" />
                     <span>Inquire</span>
