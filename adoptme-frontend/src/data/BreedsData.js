@@ -56,7 +56,7 @@ export const BREEDS_DATA = [
     lifeSpan: '7 - 10 years',
     temperament: ['Confident', 'Courageous', 'Smart', 'Loyal'],
     description: 'Widely regarded as dogkind\'s finest all-around worker. German Shepherds are devoted guardians that thrive with regular physical and mental exercise.',
-    imageUrl: 'https://www.pexels.com/photo/loyal-german-shepherd-dog-resting-outdoors-33159007/',
+    imageUrl: 'https://images.pexels.com/photos/11700750/pexels-photo-11700750.jpeg',
   },
   {
     id: 'poodle',
