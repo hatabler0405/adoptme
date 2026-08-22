@@ -56,4 +56,7 @@ public class AnimalProfile {
     private String imageUrl;
     
     private Boolean hypoallergenic;
+    private Boolean goodWithKids;
+    private Boolean goodWithDogs;
+    private Boolean goodWithCats;
 }

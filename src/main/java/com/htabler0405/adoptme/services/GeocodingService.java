@@ -14,6 +14,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
 public class GeocodingService {
@@ -26,9 +27,18 @@ public class GeocodingService {
      * Accepts a zip code or full street address and returns a PostGIS Point (X=Longitude, Y=Latitude).
      */
     public Point getCoordinatesFromAddressOrZip(String addressOrZip) {
+        if (addressOrZip == null || addressOrZip.trim().isEmpty()) {
+            return null;
+        }
+
         try {
-            String url = "https://nominatim.openstreetmap.org/search?q=" 
-                       + addressOrZip + "&format=json&limit=1";
+            // Properly builds and URL-encodes query params to prevent drops on spaces and punctuation
+            String url = UriComponentsBuilder.fromHttpUrl("https://nominatim.openstreetmap.org/search")
+                    .queryParam("q", addressOrZip.trim())
+                    .queryParam("format", "json")
+                    .queryParam("limit", "1")
+                    .build()
+                    .toUriString();
 
             HttpHeaders headers = new HttpHeaders();
             headers.set("User-Agent", "AdoptMe-App/1.0 (contact@adoptme.local)");
@@ -45,7 +55,10 @@ public class GeocodingService {
                     double lat = location.getDouble("lat"); // Y
                     double lon = location.getDouble("lon"); // X
 
+                    log.info("Geocoded '{}' -> Lat: {}, Lng: {}", addressOrZip, lat, lon);
                     return geometryFactory.createPoint(new Coordinate(lon, lat));
+                } else {
+                    log.warn("Nominatim found 0 results for address: '{}'", addressOrZip);
                 }
             }
         } catch (Exception e) {

@@ -5,56 +5,26 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MapPin, Phone, ExternalLink, PawPrint, ChevronRight } from 'lucide-react';
 
-const KNOWN_SHELTERS = {
-  1: {
-    id: 1,
-    name: 'Berkeley County Humane Society',
-    address: '554 Charles Town Rd, Martinsburg, WV',
-    phoneNumber: '304-267-8389',
-    lat: 39.4397,
-    lng: -77.9402,
-  },
-  2: {
-    id: 2,
-    name: 'Animal Welfare Society of Jefferson County',
-    address: '23 Poor Farm Rd, Kearneysville, WV',
-    phoneNumber: '304-725-0589',
-    lat: 39.3789,
-    lng: -77.8761,
-  },
-};
-
+// Exact SVG Pin with zero rotation distortion — needle tip anchored at [16, 38]
 const customPinIcon = L.divIcon({
   className: 'custom-map-marker',
   html: `
-    <div style="
-      background-color: #2563eb;
-      width: 32px;
-      height: 32px;
-      border-radius: 50% 50% 50% 0;
-      transform: rotate(-45deg);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 2px solid white;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-      cursor: pointer;
-      transition: transform 0.15s ease;
-    ">
-      <svg style="transform: rotate(45deg); width: 16px; height: 16px; fill: white;" viewBox="0 0 24 24">
-        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+    <div style="filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.35)); cursor: pointer; transition: transform 0.15s ease;">
+      <svg width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 0C7.16344 0 0 7.16344 0 16C0 26.5 16 38 16 38C16 38 32 26.5 32 16C32 7.16344 24.8366 0 16 0Z" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+        <path d="M16 22.35L14.55 21.03C9.4 16.36 6 13.28 6 9.5C6 6.42 8.42 4 11.5 4C13.24 4 14.91 4.81 16 6.09C17.09 4.81 18.76 4 20.5 4C23.58 4 26 6.42 26 9.5C26 13.28 22.6 16.36 17.45 21.04L16 22.35Z" fill="#ffffff"/>
       </svg>
     </div>
   `,
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
-  popupAnchor: [0, -32],
+  iconSize: [32, 38],
+  iconAnchor: [16, 38], // Places the needle tip on the exact GPS coordinate
+  popupAnchor: [0, -38],
 });
 
 export default function PetMap({ animals = [], onSelectAnimal }) {
   const navigate = useNavigate();
 
-  // ONLY generate markers for shelters that have at least 1 filtered animal
+  // Aggregate active shelters using coordinates provided directly from the API response
   const activeMarkers = useMemo(() => {
     if (!Array.isArray(animals) || animals.length === 0) {
       return [];
@@ -63,42 +33,38 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
     const shelterMap = new Map();
 
     animals.forEach((animal) => {
-      const rawId = animal.shelterId ?? animal.shelter?.id;
-      let sId = rawId ? Number(rawId) : null;
+      const shelterId = animal.shelterId ?? animal.shelter?.id;
+      const lat = animal.latitude ?? animal.shelterLatitude ?? animal.shelter?.latitude;
+      const lng = animal.longitude ?? animal.shelterLongitude ?? animal.shelter?.longitude;
 
-      if (!sId) {
-        const name = (animal.shelterName || animal.shelter?.name || '').toLowerCase();
-        if (name.includes('berkeley')) sId = 1;
-        else if (name.includes('jefferson') || name.includes('welfare')) sId = 2;
-        else sId = 1;
+      if (!shelterId || !lat || !lng) {
+        return;
       }
 
-      const fallback = KNOWN_SHELTERS[sId] || KNOWN_SHELTERS[1];
-
-      if (!shelterMap.has(sId)) {
-        shelterMap.set(sId, {
-          id: sId,
-          name: animal.shelterName || fallback.name,
-          address: animal.shelterAddress || fallback.address,
-          phone: animal.shelterPhone || fallback.phoneNumber,
-          lat: fallback.lat,
-          lng: fallback.lng,
+      if (!shelterMap.has(shelterId)) {
+        shelterMap.set(shelterId, {
+          id: shelterId,
+          name: animal.shelterName || animal.shelter?.name || 'Partner Shelter',
+          address: animal.shelterAddress || animal.shelter?.address || '',
+          phone: animal.shelterPhone || animal.shelter?.phone || animal.shelter?.phoneNumber || '',
+          lat: Number(lat),
+          lng: Number(lng),
           animals: [],
         });
       }
-      shelterMap.get(sId).animals.push(animal);
+      shelterMap.get(shelterId).animals.push(animal);
     });
 
     return Array.from(shelterMap.values());
   }, [animals]);
 
-  const defaultCenter = [39.41, -77.91];
+  const defaultCenter = [39.44026, -77.94054];
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-3xl border border-gray-200 shadow-sm dark:border-gray-800">
       <MapContainer
         center={activeMarkers.length > 0 ? [activeMarkers[0].lat, activeMarkers[0].lng] : defaultCenter}
-        zoom={11}
+        zoom={12}
         scrollWheelZoom={false}
         className="h-full w-full"
         style={{ minHeight: '100%', height: '100%', width: '100%' }}
@@ -120,7 +86,7 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
             }}
           >
             <Popup className="custom-popup">
-              <div className="p-1 min-w-[240px]">
+              <div className="p-1 min-w-60">
                 {/* Shelter Header */}
                 <div
                   onClick={() => navigate(`/shelters/${shelter.id}`)}
@@ -132,10 +98,12 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
                     </h4>
                     <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
                   </div>
-                  <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1">
-                    <MapPin className="h-3 w-3 shrink-0" />
-                    {shelter.address || 'Address unavailable'}
-                  </p>
+                  {shelter.address && (
+                    <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1">
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      {shelter.address}
+                    </p>
+                  )}
                   {shelter.phone && (
                     <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
                       <Phone className="h-3 w-3 shrink-0" />

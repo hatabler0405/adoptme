@@ -1,17 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Loader2, PawPrint, Navigation2, ChevronLeft, ChevronRight } from 'lucide-react';
 import FilterBar from '../components/FilterBar';
 import PetCard from '../components/PetCard';
 import PetMap from '../components/PetMap';
 import PetModal from '../components/PetModal';
 import { useAuth } from '../context/AuthContext';
-import api, { animalService } from '../services/api';
-import { useLocation } from 'react-router-dom';
-
-const SHELTER_COORDS = {
-  1: { lat: 39.4397, lng: -77.9402 },
-  2: { lat: 39.3789, lng: -77.8761 },
-};
+import { animalService } from '../services/api';
 
 function calculateDistanceMiles(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -124,14 +119,12 @@ export default function ExplorePage() {
       try {
         const data = await animalService.searchAnimals(payload, pageToFetch, 16);
         
-        // Handle Spring Data Page object response
         if (data && data.content) {
           setRawAnimals(data.content);
           setTotalPages(data.totalPages || 0);
           setTotalElements(data.totalElements || 0);
           setCurrentPage(data.number || 0);
         } else if (Array.isArray(data)) {
-          // Fallback if returned as raw array
           setRawAnimals(data);
           setTotalPages(1);
           setTotalElements(data.length);
@@ -165,7 +158,6 @@ export default function ExplorePage() {
     ]
   );
 
-  // Trigger search on filter update and reset back to page 0
   useEffect(() => {
     setCurrentPage(0);
     fetchAnimals(0);
@@ -180,31 +172,24 @@ export default function ExplorePage() {
   const filteredAnimals = useMemo(() => {
     return rawAnimals
       .map((animal) => {
-        const rawId = animal.shelterId ?? animal.shelter?.id;
-        let shelterId = rawId ? Number(rawId) : null;
-
-        if (!shelterId) {
-          const name = (animal.shelterName || animal.shelter?.name || '').toLowerCase();
-          if (name.includes('berkeley')) shelterId = 1;
-          else if (name.includes('jefferson') || name.includes('welfare')) shelterId = 2;
-          else shelterId = 1;
-        }
-
-        const coords = SHELTER_COORDS[shelterId] || SHELTER_COORDS[1];
+        // Read real coordinates sent directly by the backend DTO
+        const lat = animal.shelterLatitude ?? animal.shelter?.latitude ?? null;
+        const lng = animal.shelterLongitude ?? animal.shelter?.longitude ?? null;
 
         let distance = null;
-        if (userCoords && coords) {
+        if (userCoords && lat && lng) {
           distance = calculateDistanceMiles(
             userCoords.latitude,
             userCoords.longitude,
-            coords.lat,
-            coords.lng
+            lat,
+            lng
           );
         }
 
         return {
           ...animal,
-          shelterId,
+          latitude: lat,
+          longitude: lng,
           distance,
         };
       })

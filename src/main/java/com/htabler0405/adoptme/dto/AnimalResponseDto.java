@@ -1,60 +1,63 @@
 package com.htabler0405.adoptme.dto;
 
 import com.htabler0405.adoptme.entities.AnimalProfile;
+import com.htabler0405.adoptme.entities.Shelter;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
-
+import lombok.Setter;
+@Getter
+@Setter
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class AnimalResponseDto {
     private Long id;
     private String name;
-    private String species;
     private String breed;
-    private String age;
+    private String species;
     private String gender;
+    private String age;
     private String size;
-    private String description;
+    private String color;
     private String imageUrl;
-    private boolean hypoallergenic;
-    private String status;
-    private String sourceUrl;
-    private LocalDateTime lastSeenAt;
+    private Boolean hypoallergenic;
+    private Boolean goodWithKids;
+    private Boolean goodWithDogs;
+    private Boolean goodWithCats;
 
     // Shelter details
     private Long shelterId;
     private String shelterName;
-    private String shelterAddress;
-    private String shelterPhone;
-    private String shelterEmail;
-    private String shelterWebsite;
+    private Double shelterLatitude;
+    private Double shelterLongitude;
 
     public AnimalResponseDto(AnimalProfile animal) {
         this.id = animal.getId();
         this.name = animal.getName();
-        this.species = animal.getSpecies();
         this.breed = animal.getBreed();
-        this.age = animal.getAge();
+        this.species = animal.getSpecies();
         this.gender = animal.getGender();
+        this.age = animal.getAge();
         this.size = animal.getSize();
-        this.description = animal.getDescription();
+        this.color = animal.getColor();
         this.imageUrl = animal.getImageUrl();
-        this.hypoallergenic = Boolean.TRUE.equals(animal.getHypoallergenic());
-        this.status = animal.getStatus();
-        this.sourceUrl = animal.getSourceUrl();
-        this.lastSeenAt = animal.getLastSeenAt();
+        this.hypoallergenic = animal.getHypoallergenic();
+        this.goodWithKids = animal.getGoodWithKids();
+        this.goodWithDogs = animal.getGoodWithDogs();
+        this.goodWithCats = animal.getGoodWithCats();
 
-        if (animal.getShelter() != null) {
-            this.shelterId = animal.getShelter().getId();
-            this.shelterName = animal.getShelter().getName();
-            this.shelterAddress = animal.getShelter().getAddress();
-            this.shelterPhone = animal.getShelter().getPhoneNumber();
-            this.shelterEmail = animal.getShelter().getEmail();
-            this.shelterWebsite = animal.getShelter().getWebsiteUrl();
+        Shelter shelter = animal.getShelter();
+        if (shelter != null) {
+            this.shelterId = shelter.getId();
+            this.shelterName = shelter.getName();
+            
+            if (shelter.getLocation() != null && animal.getShelter().getLocation() != null) {
+                this.shelterLongitude = shelter.getLocation().getCoordinate().x;
+                this.shelterLatitude = shelter.getLocation().getCoordinate().y;
+            }
         }
     }
 }
