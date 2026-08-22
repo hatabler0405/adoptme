@@ -14,7 +14,7 @@ export const BREEDS_DATA = [
     lifeSpan: '10 - 12 years',
     temperament: ['Playful', 'Adaptable', 'Smart', 'Affectionate'],
     description: 'One of the world\'s most popular small-dog breeds. Their quiet demeanor and compact size make them ideal companions for city dwellers and apartment living.',
-    imageUrl: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/34239657/pexels-photo-34239657.jpeg',
   },
   {
     id: 'labrador-retriever',
@@ -28,7 +28,7 @@ export const BREEDS_DATA = [
     lifeSpan: '11 - 13 years',
     temperament: ['Friendly', 'Active', 'Outgoing', 'Gentle'],
     description: 'The quintessential friendly companion. Labs are energetic sporting dogs eager to bond with the whole family, socialize, and swim.',
-    imageUrl: 'https://images.unsplash.com/photo-1591769225440-811ad7d6eab2?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/17215310/pexels-photo-17215310.jpeg',
   },
   {
     id: 'golden-retriever',
@@ -42,7 +42,7 @@ export const BREEDS_DATA = [
     lifeSpan: '10 - 12 years',
     temperament: ['Intelligent', 'Friendly', 'Devoted', 'Trustworthy'],
     description: 'Stalwart family favorites, Golden Retrievers are joyful, easy to train, and excel as guide, search-and-rescue, and service animals.',
-    imageUrl: 'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/19962782/pexels-photo-19962782.jpeg',
   },
   {
     id: 'german-shepherd',
@@ -56,7 +56,7 @@ export const BREEDS_DATA = [
     lifeSpan: '7 - 10 years',
     temperament: ['Confident', 'Courageous', 'Smart', 'Loyal'],
     description: 'Widely regarded as dogkind\'s finest all-around worker. German Shepherds are devoted guardians that thrive with regular physical and mental exercise.',
-    imageUrl: 'https://images.unsplash.com/photo-1589941013453-ec89f33b5e95?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://www.pexels.com/photo/loyal-german-shepherd-dog-resting-outdoors-33159007/',
   },
   {
     id: 'poodle',
@@ -70,7 +70,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 15 years',
     temperament: ['Active', 'Proud', 'Brilliant', 'Eager'],
     description: 'Renowned for elegance and unmatched intelligence. Their low-dander, non-shedding coat makes them the gold standard for allergy sufferers.',
-    imageUrl: 'https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/35276199/pexels-photo-35276199.jpeg',
   },
   {
     id: 'bulldog',
@@ -84,7 +84,7 @@ export const BREEDS_DATA = [
     lifeSpan: '8 - 10 years',
     temperament: ['Docile', 'Willful', 'Friendly', 'Calm'],
     description: 'With their distinctive wrinkled face and rolling gait, Bulldogs are quiet, easygoing companions that prefer short walks and lots of nap time.',
-    imageUrl: 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/5288556/pexels-photo-5288556.jpeg',
   },
   {
     id: 'beagle',
@@ -98,7 +98,7 @@ export const BREEDS_DATA = [
     lifeSpan: '10 - 15 years',
     temperament: ['Amiable', 'Curious', 'Merry', 'Determined'],
     description: 'Curious scent hounds with happy-go-lucky attitudes. Beagles are sturdy, energetic pack animals that get along great with other dogs and kids.',
-    imageUrl: 'https://images.unsplash.com/photo-1505628346881-b72b27e84530?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/28220888/pexels-photo-28220888.jpeg',
   },
   {
     id: 'rottweiler',
@@ -112,7 +112,7 @@ export const BREEDS_DATA = [
     lifeSpan: '9 - 10 years',
     temperament: ['Loyal', 'Loving', 'Confident', 'Guardian'],
     description: 'A robust working dog of great strength. Rottweilers are gentle playmates and protectors within their family circle, holding a calm confidence.',
-    imageUrl: 'https://images.unsplash.com/photo-1567752881298-894bb81f9379?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/19892502/pexels-photo-19892502.jpeg',
   },
   {
     id: 'dachshund',
@@ -126,7 +126,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 16 years',
     temperament: ['Spunky', 'Clever', 'Courageous', 'Devoted'],
     description: 'Iconic for their long silhouette and short legs. Dachshunds are spunky, fearless scent hounds with big personalities in compact bodies.',
-    imageUrl: 'https://images.unsplash.com/photo-1612195583950-b8fd34c87093?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/31040636/pexels-photo-31040636.jpeg',
   },
   {
     id: 'german-shorthaired-pointer',
@@ -140,7 +140,7 @@ export const BREEDS_DATA = [
     lifeSpan: '10 - 12 years',
     temperament: ['Boisterous', 'Affectionate', 'Trainable', 'Active'],
     description: 'The ultimate versatile hunter-companion. GSPs are athletic, friendly dogs that love running, swimming, and outdoor endurance activities.',
-    imageUrl: 'https://images.unsplash.com/photo-1537151608828-ea2b11777ee8?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/25950391/pexels-photo-25950391.jpeg',
   },
   {
     id: 'pembroke-welsh-corgi',
@@ -154,7 +154,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 13 years',
     temperament: ['Alert', 'Affectionate', 'Smart', 'Tenacious'],
     description: 'Short-legged herders packed with spunk and intelligence. Corgis are vocal, responsive, and form strong protective bonds with their families.',
-    imageUrl: 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/23427671/pexels-photo-23427671.jpeg',
   },
   {
     id: 'australian-shepherd',
@@ -168,7 +168,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 15 years',
     temperament: ['Work-oriented', 'Intelligent', 'Good-natured', 'Exuberant'],
     description: 'A tireless ranch dog known for keen eyes and agility. Aussies require plenty of agility, herding, or running tasks to channel their work drive.',
-    imageUrl: 'https://images.unsplash.com/photo-1503256207526-0d5d80fa2f47?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/18201403/pexels-photo-18201403.jpeg',
   },
   {
     id: 'yorkshire-terrier',
@@ -182,7 +182,7 @@ export const BREEDS_DATA = [
     lifeSpan: '11 - 15 years',
     temperament: ['Feisty', 'Affectionate', 'Sprightly', 'Tomboyish'],
     description: 'Tiny in stature but big on personality. Yorkies possess a human-like, non-shedding silky coat and a fearless terrier attitude.',
-    imageUrl: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/29026342/pexels-photo-29026342.jpeg',
   },
   {
     id: 'boxer',
@@ -196,7 +196,7 @@ export const BREEDS_DATA = [
     lifeSpan: '10 - 12 years',
     temperament: ['Playful', 'Patient', 'Devoted', 'Upbeat'],
     description: 'Muscular, athletic, and endlessly playful. Boxers are celebrated for their patience and gentle protective nature around young children.',
-    imageUrl: 'https://images.unsplash.com/photo-1543071220-6ee5bf71a54e?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/4687834/pexels-photo-4687834.jpeg',
   },
   {
     id: 'siberian-husky',
@@ -210,7 +210,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 14 years',
     temperament: ['Outgoing', 'Mischievous', 'Gentle', 'Loyal'],
     description: 'Thick-coated sled dogs bred for endurance in packs. Huskies are graceful, vocal, and love colder climates and running companions.',
-    imageUrl: 'https://images.unsplash.com/photo-1537151608828-ea2b11777ee8?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/11761041/pexels-photo-11761041.jpeg',
   },
 
   // ==========================================
@@ -228,7 +228,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 17 years',
     temperament: ['Gentle', 'Affectionate', 'Placid', 'Sweet'],
     description: 'Named for their habit of going limp with pleasure when cradled. Ragdolls are blue-eyed, fluffy sweethearts who follow owners room to room.',
-    imageUrl: 'https://images.unsplash.com/photo-1513360309081-38f0762daed1?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/19468852/pexels-photo-19468852.jpeg',
   },
   {
     id: 'maine-coon',
@@ -242,7 +242,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 15 years',
     temperament: ['Friendly', 'Sociable', 'Gentle', 'Playful'],
     description: 'The native American longhair and gentle giant. Maine Coons have tufted ears, dense water-resistant fur, and dog-like loyal personalities.',
-    imageUrl: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/15657864/pexels-photo-15657864.jpeg',
   },
   {
     id: 'devon-rex',
@@ -256,7 +256,7 @@ export const BREEDS_DATA = [
     lifeSpan: '9 - 15 years',
     temperament: ['Playful', 'Mischievous', 'Loyal', 'Snuggly'],
     description: 'Pixie-like felines with oversized ears and rippled coats. Their short, minimal-shed coat produces fewer allergens than typical cats.',
-    imageUrl: 'https://images.unsplash.com/photo-1573865526739-10659fec78a5?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/30912813/pexels-photo-30912813.jpeg',
   },
   {
     id: 'exotic-shorthair',
@@ -270,7 +270,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 14 years',
     temperament: ['Calm', 'Quiet', 'Sweet', 'Loving'],
     description: 'Often called the "lazy man\'s Persian." They have the sweet flat face and docile nature of Persians without the high-maintenance daily brushing.',
-    imageUrl: 'https://images.unsplash.com/photo-1533738363-b7f9aef128ce?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/10402135/pexels-photo-10402135.jpeg',
   },
   {
     id: 'persian',
@@ -284,7 +284,7 @@ export const BREEDS_DATA = [
     lifeSpan: '10 - 15 years',
     temperament: ['Quiet', 'Docile', 'Gentle', 'Dignified'],
     description: 'The aristocrat of cat breeds with a luxurious long coat and serene disposition. Persians enjoy quiet homes and regular grooming rituals.',
-    imageUrl: 'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/32727346/pexels-photo-32727346.jpeg',
   },
   {
     id: 'british-shorthair',
@@ -298,7 +298,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 17 years',
     temperament: ['Easygoing', 'Calm', 'Loyal', 'Independent'],
     description: 'Sturdy, round-faced, teddy-bear cats. British Shorthairs are peaceful, undemanding, and happy observing their humans from nearby perches.',
-    imageUrl: 'https://images.unsplash.com/photo-1574158622682-e40e69881006?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/32419593/pexels-photo-32419593.jpeg',
   },
   {
     id: 'abyssinian',
@@ -312,7 +312,7 @@ export const BREEDS_DATA = [
     lifeSpan: '9 - 15 years',
     temperament: ['Active', 'Inquisitive', 'Athletic', 'Curious'],
     description: 'Resembling ancient wildcats with a ticked agouti coat. Abyssinians are high-energy acrobats that love climbing to the highest shelves in the house.',
-    imageUrl: 'https://images.unsplash.com/photo-1513360309081-38f0762daed1?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/30163612/pexels-photo-30163612.jpeg',
   },
   {
     id: 'scottish-fold',
@@ -326,7 +326,7 @@ export const BREEDS_DATA = [
     lifeSpan: '11 - 14 years',
     temperament: ['Sweet-tempered', 'Loving', 'Quiet', 'Playful'],
     description: 'Famous for their folded forward ears and owl-like expressions. They love posing like humans in the "Buddha position" and enjoying cuddles.',
-    imageUrl: 'https://images.unsplash.com/photo-1543852786-1cf6624b9987?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/29212154/pexels-photo-29212154.jpeg',
   },
   {
     id: 'sphynx',
@@ -340,7 +340,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 14 years',
     temperament: ['Extroverted', 'Acrobatic', 'Curious', 'Warm'],
     description: 'Hairless and heat-seeking. Sphynx cats are cuddly, extroverted clowns that require regular sponge baths to manage skin oils.',
-    imageUrl: 'https://images.unsplash.com/photo-1513245543132-31f507417b26?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/34574282/pexels-photo-34574282.jpeg',
   },
   {
     id: 'siberian',
@@ -354,7 +354,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 15 years',
     temperament: ['Affectionate', 'Fearless', 'Playful', 'Athletic'],
     description: 'A dense triple-coat forest cat. Despite heavy fur, they naturally produce significantly lower levels of the Fel d 1 allergy protein.',
-    imageUrl: 'https://images.unsplash.com/photo-1535930891776-0c2dfb7fda1a?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/20425560/pexels-photo-20425560.jpeg',
   },
   {
     id: 'american-shorthair',
@@ -368,7 +368,7 @@ export const BREEDS_DATA = [
     lifeSpan: '15 - 20 years',
     temperament: ['Even-tempered', 'Sociable', 'Gentle', 'Robust'],
     description: 'Healthy, low-maintenance mouser champions with symmetrical tabby markings. Extremely versatile companions that fit any household.',
-    imageUrl: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/479009/pexels-photo-479009.jpeg',
   },
   {
     id: 'bengal',
@@ -382,7 +382,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 16 years',
     temperament: ['Athletic', 'Curious', 'Bold', 'Talkative'],
     description: 'Exotic spotted or marbled coats reminiscent of wild leopards. Bengals are muscular, vocal jumpers that even enjoy water play.',
-    imageUrl: 'https://images.unsplash.com/photo-1513360309081-38f0762daed1?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/30002375/pexels-photo-30002375.jpeg',
   },
   {
     id: 'russian-blue',
@@ -396,7 +396,7 @@ export const BREEDS_DATA = [
     lifeSpan: '15 - 20 years',
     temperament: ['Reserved', 'Gentle', 'Intelligent', 'Quiet'],
     description: 'Shimmering silver-blue coat and striking emerald eyes. Russian Blues are shy around strangers but deeply devoted to their chosen people.',
-    imageUrl: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/17978639/pexels-photo-17978639.jpeg',
   },
   {
     id: 'norwegian-forest-cat',
@@ -410,7 +410,7 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 16 years',
     temperament: ['Gentle', 'Friendly', 'Calm', 'Mighty'],
     description: 'Viking lore legends with waterproof coats and bushy tails. They are skilled climbers who love high vantage points and family games.',
-    imageUrl: 'https://images.unsplash.com/photo-1543852786-1cf6624b9987?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/24023501/pexels-photo-24023501.jpeg',
   },
   {
     id: 'oriental-shorthair',
@@ -424,6 +424,6 @@ export const BREEDS_DATA = [
     lifeSpan: '12 - 15 years',
     temperament: ['Lively', 'Chatty', 'Affectionate', 'Demanding'],
     description: 'Sleek, angular felines with bat-wing ears. They vocalize constantly with distinctive raspy meows and demand lots of interactive attention.',
-    imageUrl: 'https://images.unsplash.com/photo-1573865526739-10659fec78a5?auto=format&fit=crop&w=600&q=80',
+    imageUrl: 'https://images.pexels.com/photos/38679266/pexels-photo-38679266.jpeg',
   }
 ];
