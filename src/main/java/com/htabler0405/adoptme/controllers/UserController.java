@@ -8,7 +8,6 @@ import com.htabler0405.adoptme.services.FavoriteAnimalService;
 import com.htabler0405.adoptme.services.UserAccountOptionsService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -33,8 +32,9 @@ public class UserController {
         return ResponseEntity.status(HttpStatus.CREATED).body("User registered successfully");
     }
 
-    @DeleteMapping()
-    public ResponseEntity<Void> deleteUser(@AuthenticationPrincipal Long userId) {
+    @DeleteMapping
+    public ResponseEntity<Void> deleteUser(Principal principal) {
+        Long userId = Long.parseLong(principal.getName());
         accountOptionsService.deleteUser(userId);
         return ResponseEntity.noContent().build();
     }
@@ -71,24 +71,27 @@ public class UserController {
 
     @PostMapping("/favorites/{animalId}")
     public ResponseEntity<Void> addFavorite(
-            @AuthenticationPrincipal Long userId, 
+            Principal principal, 
             @PathVariable Long animalId) {
         
+        Long userId = Long.parseLong(principal.getName());
         favoriteService.addFavoriteAnimal(userId, animalId);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
     @DeleteMapping("/favorites/{animalId}")
     public ResponseEntity<Void> removeFavorite(
-            @AuthenticationPrincipal Long userId, 
+            Principal principal, 
             @PathVariable Long animalId) {
         
+        Long userId = Long.parseLong(principal.getName());
         favoriteService.removeFavoriteAnimal(userId, animalId);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/favorites")
-    public ResponseEntity<List<AnimalResponseDto>> getUserFavorites(@AuthenticationPrincipal Long userId) {
+    public ResponseEntity<List<AnimalResponseDto>> getUserFavorites(Principal principal) {
+        Long userId = Long.parseLong(principal.getName());
         List<AnimalResponseDto> favorites = favoriteService.getUserFavoriteAnimal(userId);
         return ResponseEntity.ok(favorites);
     }
