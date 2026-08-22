@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, AlertTriangle } from 'lucide-react';
+import { X, Loader2, AlertTriangle, ExternalLink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function AuthModal() {
@@ -8,6 +8,7 @@ export default function AuthModal() {
   const [mode, setMode] = useState('register');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const [formData, setFormData] = useState({
     username: '',
@@ -20,12 +21,12 @@ export default function AuthModal() {
     zipCode: '',
   });
 
-  // Sync mode whenever modal is opened
   useEffect(() => {
     if (authMode) {
       setMode(authMode);
     }
     setError('');
+    setAgreedToTerms(false);
   }, [authMode, isAuthModalOpen]);
 
   if (!isAuthModalOpen) return null;
@@ -39,6 +40,10 @@ export default function AuthModal() {
     setError('');
 
     if (mode === 'register') {
+      if (!agreedToTerms) {
+        setError('You must agree to the Terms of Service to create an account.');
+        return;
+      }
       if (!formData.username.trim()) {
         setError('Please choose a username.');
         return;
@@ -82,8 +87,13 @@ export default function AuthModal() {
     'w-full rounded-xl border border-slate-800 bg-[#0f172a]/60 px-3.5 py-2 text-xs text-white placeholder-slate-500 transition focus:border-blue-500 focus:outline-none';
   const labelClass = 'block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1';
 
+  const isSubmitDisabled = loading || (mode === 'register' && !agreedToTerms);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      onClick={closeAuthModal}
+    >
       <div 
         className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-slate-800 bg-[#0b1329] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -91,12 +101,11 @@ export default function AuthModal() {
         <button
           type="button"
           onClick={closeAuthModal}
-          className="absolute right-4 top-4 rounded-full p-2 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+          className="absolute right-4 top-4 rounded-full p-2 text-slate-400 hover:bg-slate-800 hover:text-white transition cursor-pointer"
         >
           <X className="h-4 w-4" />
         </button>
 
-        {/* Modal Header */}
         <div className="mb-5 text-center">
           <h2 className="text-xl font-black text-white">
             {mode === 'register' ? 'Create Your Account' : 'Welcome Back'}
@@ -227,13 +236,37 @@ export default function AuthModal() {
                   </div>
                 </div>
               </div>
+
+              {/* Terms Checkbox */}
+              <div className="flex items-start gap-2.5 pt-2">
+                <input
+                  type="checkbox"
+                  id="agreeTerms"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900 cursor-pointer"
+                />
+                <label htmlFor="agreeTerms" className="text-xs text-slate-400 select-none cursor-pointer">
+                  I agree to the{' '}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5 font-bold text-blue-400 hover:text-blue-300 hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <span>Terms of Service</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </label>
+              </div>
             </>
           )}
 
           <button
             type="submit"
-            disabled={loading}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
+            disabled={isSubmitDisabled}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
           >
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -245,7 +278,6 @@ export default function AuthModal() {
           </button>
         </form>
 
-        {/* Bottom Switcher */}
         <div className="mt-5 border-t border-slate-800 pt-4 text-center">
           {mode === 'register' ? (
             <p className="text-xs text-slate-400">

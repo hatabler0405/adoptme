@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   User, 
   Lock, 
@@ -10,13 +11,16 @@ import {
   Moon, 
   Palette, 
   MessageSquarePlus, 
-  Send 
+  Send,
+  FileText,
+  ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { userService } from '../services/api';
 
 export default function SettingsPage() {
+  const navigate = useNavigate();
   const { user, deleteAccount, updateUserProfile } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
@@ -113,7 +117,7 @@ export default function SettingsPage() {
 
     try {
       setFeedbackLoading(true);
-      // Simulating / fallback payload handling or sending to your backend
+      // Simulating / fallback payload handling or sending to backend
       await new Promise((resolve) => setTimeout(resolve, 600));
 
       setFeedbackSuccess('Thank you! Your feedback has been submitted directly to the team.');
@@ -155,7 +159,7 @@ export default function SettingsPage() {
           Account Settings
         </h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Manage your credentials, preferences, appearance, and feedback.
+          Manage your credentials, preferences, appearance, and legal policies.
         </p>
       </div>
 
@@ -419,6 +423,32 @@ export default function SettingsPage() {
             <span>{feedbackLoading ? 'Submitting...' : 'Submit Feedback'}</span>
           </button>
         </form>
+      </div>
+
+      {/* Legal & Policies (Directly above Danger Zone) */}
+      <div className={cardClass}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Legal & Policies</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Review platform rules, terms of service, and shelter disclaimers.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/terms')}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+          >
+            <span>Terms of Service</span>
+            <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+          </button>
+        </div>
       </div>
 
       {/* Danger Zone: Account Deletion */}

@@ -8,6 +8,7 @@ import ShelterDetailsPage from './pages/ShelterDetailsPage';
 import FavoritesPage from './pages/FavoritesPage';
 import SettingsPage from './pages/SettingsPage';
 import BreedsPage from './pages/BreedsPage';
+import TermsPage from './pages/TermsPage';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/breeds" element={<BreedsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/terms" element={<TermsPage />} />
         </Routes>
       </main>
       <AuthModal />
