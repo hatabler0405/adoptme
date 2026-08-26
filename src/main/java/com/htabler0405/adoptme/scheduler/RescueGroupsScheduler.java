@@ -21,15 +21,16 @@ public class RescueGroupsScheduler {
     }
 
     /**
-     * Runs quickly on server startup in a background thread (fetches just page 1 so app boots instantly).
+     * Runs quickly on server startup in a background thread so the app boots instantly
+     * and seeds local Quad-State / WV / MD / VA data right away.
      */
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {
-        log.info("Triggering quick startup pet sync (Page 1)...");
+        log.info("Triggering quick startup pet sync for ZIP {} ({} mi)...", DEFAULT_ZIP, DEFAULT_RADIUS_MILES);
         new Thread(() -> {
             try {
-                // Quick sync for immediate local data on boot
-                syncService.syncAnimalsNearZip(DEFAULT_ZIP, DEFAULT_RADIUS_MILES);
+                int saved = syncService.syncAnimalsNearZip(DEFAULT_ZIP, DEFAULT_RADIUS_MILES);
+                log.info("Startup pet sync complete. Seeded {} local records.", saved);
             } catch (Exception e) {
                 log.error("Startup sync failed: {}", e.getMessage());
             }
@@ -37,16 +38,30 @@ public class RescueGroupsScheduler {
     }
 
     /**
-     * Runs every 24 hours at 3:00 AM, doing the full deep multi-page ingestion.
+     * Daily local refresh: Runs every day at 3:00 AM server time for your primary 100-mile radius.
      */
-    @Scheduled(cron = "0 0 3 * * *")
-    public void runDailyPetSync() {
-        log.info("Starting scheduled 24-hour deep sync from RescueGroups API...");
+    @Scheduled(cron = "0 0 3 * * ?")
+    public void runDailyLocalSync() {
+        log.info("Starting daily local pet sync for {} ({} mi)...", DEFAULT_ZIP, DEFAULT_RADIUS_MILES);
         try {
             int savedCount = syncService.syncAnimalsNearZip(DEFAULT_ZIP, DEFAULT_RADIUS_MILES);
-            log.info("Daily deep sync finished: Ingested/updated {} records.", savedCount);
+            log.info("Daily local sync complete: Ingested/updated {} records.", savedCount);
         } catch (Exception e) {
-            log.error("Scheduled pet sync encountered an error: {}", e.getMessage(), e);
+            log.error("Daily local pet sync failed: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Weekly nationwide bulk ingestion: Runs every Sunday at 4:00 AM server time across all 8 national hubs.
+     * Executes non-blocking in the background via @Async.
+     */
+    @Scheduled(cron = "0 0 4 * * SUN")
+    public void runWeeklyNationwideSync() {
+        log.info("Starting scheduled weekly nationwide bulk ingestion...");
+        try {
+            syncService.syncNationwideDatabase();
+        } catch (Exception e) {
+            log.error("Weekly nationwide sync failed: {}", e.getMessage(), e);
         }
     }
 }

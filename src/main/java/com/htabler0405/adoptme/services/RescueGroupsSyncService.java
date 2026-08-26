@@ -11,6 +11,7 @@ import com.htabler0405.adoptme.sources.SourceType;
 import lombok.extern.slf4j.Slf4j;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
@@ -18,6 +19,7 @@ import org.springframework.web.client.RestClient;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -30,6 +32,54 @@ public class RescueGroupsSyncService {
     private final AnimalProfileRepository animalRepository;
     private final GeometryFactory geometryFactory;
 
+    // Comprehensive major US metropolitan hubs covering all population centers
+    private static final List<String> REGIONAL_HUBS = List.of(
+            // Mid-Atlantic & Capital Region
+            "20001", // Washington, DC
+            "21201", // Baltimore, MD
+            "25405", // Martinsburg, WV / Eastern Panhandle
+            "19102", // Philadelphia, PA
+            "15201", // Pittsburgh, PA
+
+            // Northeast & New England
+            "10001", // New York, NY
+            "02108", // Boston, MA
+
+            // Southeast & Florida
+            "30301", // Atlanta, GA
+            "33101", // Miami, FL
+            "32801", // Orlando, FL
+            "28202", // Charlotte, NC
+            "37201", // Nashville, TN
+
+            // Midwest & Great Lakes
+            "60601", // Chicago, IL
+            "48226", // Detroit, MI
+            "43215", // Columbus, OH
+            "55401", // Minneapolis, MN
+            "63101", // St. Louis, MO
+            "64101", // Kansas City, MO
+
+            // South & Texas
+            "75201", // Dallas / Fort Worth, TX
+            "77002", // Houston, TX
+            "78701", // Austin, TX
+            "70112", // New Orleans, LA
+
+            // Mountain West & Southwest
+            "80201", // Denver, CO
+            "85001", // Phoenix, AZ
+            "89101", // Las Vegas, NV
+            "84101", // Salt Lake City, UT
+
+            // West Coast & Pacific Northwest
+            "90001", // Los Angeles, CA
+            "94102", // San Francisco / Bay Area, CA
+            "92101", // San Diego, CA
+            "98101", // Seattle, WA
+            "97201"  // Portland, OR
+    );
+
     public RescueGroupsSyncService(
             RestClient rescueGroupsRestClient,
             AnimalShelterRepository shelterRepository,
@@ -41,16 +91,42 @@ public class RescueGroupsSyncService {
         this.geometryFactory = geometryFactory;
     }
 
+    @Async
+    public CompletableFuture<Integer> syncNationwideDatabase() {
+        log.info("Starting Comprehensive Nationwide Ingestion across {} major metro hubs...", REGIONAL_HUBS.size());
+        int grandTotal = 0;
+        
+        for (String hubZip : REGIONAL_HUBS) {
+            try {
+                // Fetch up to 5 pages per metro hub (500 animals per metro area)
+                int count = syncAnimalsNearZip(hubZip, 75, 5);
+                grandTotal += count;
+                log.info("Hub {} sync complete (+{} pets). Running total: {}", hubZip, count, grandTotal);
+                Thread.sleep(300); // Polite rate-limiting between hubs
+            } catch (Exception e) {
+                log.error("Failed syncing hub {}: {}", hubZip, e.getMessage());
+            }
+        }
+        
+        log.info("Comprehensive Nationwide Ingestion complete! Total records saved/updated: {}", grandTotal);
+        return CompletableFuture.completedFuture(grandTotal);
+    }
+
+    // 2-argument overload default
     @Transactional
     public int syncAnimalsNearZip(String postalCode, int distanceMiles) {
-        log.info("Starting multi-page RescueGroups sync near {} ({} mi radius)...", postalCode, distanceMiles);
+        return syncAnimalsNearZip(postalCode, distanceMiles, 10);
+    }
+
+    // 3-argument execution
+    @Transactional
+    public int syncAnimalsNearZip(String postalCode, int distanceMiles, int maxPages) {
+        log.info("Starting RescueGroups sync near {} ({} mi, up to {} pages)...", postalCode, distanceMiles, maxPages);
 
         int totalSaved = 0;
-        int maxPages = 10; // Ingest up to 1,000 animals (10 pages * 100)
 
         for (int page = 1; page <= maxPages; page++) {
             final int currentPage = page;
-            log.info("Fetching page {} of {} from RescueGroups...", currentPage, maxPages);
 
             RescueGroupsResponseDto response;
             try {
@@ -66,15 +142,15 @@ public class RescueGroupsSyncService {
                         .retrieve()
                         .body(RescueGroupsResponseDto.class);
             } catch (Exception e) {
-                log.error("Failed to query RescueGroups page {}: {}", currentPage, e.getMessage());
+                log.error("Failed querying RescueGroups page {}: {}", currentPage, e.getMessage());
                 break;
             }
 
             if (response == null || response.data() == null || response.data().isEmpty()) {
-                log.info("No more animals found at page {}. Ending sync.", currentPage);
                 break;
             }
 
+            @SuppressWarnings("null")
             Map<String, RescueGroupsIncludedItem> includedMap = Optional.ofNullable(response.included())
                     .orElse(Collections.emptyList())
                     .stream()
@@ -153,9 +229,7 @@ public class RescueGroupsSyncService {
                         shelter = shelterCache.get(orgId);
                     }
 
-                    if (shelter == null) {
-                        continue;
-                    }
+                    if (shelter == null) continue;
 
                     profile.setShelter(shelter);
                     profile.setName(attr.name() != null ? attr.name() : "Adoptable Pet");
@@ -203,19 +277,15 @@ public class RescueGroupsSyncService {
 
             totalSaved += pageSaved;
 
-            if (response.data().size() < 100) {
-                log.info("Reached end of available records on page {}.", currentPage);
-                break;
-            }
+            if (response.data().size() < 100) break;
 
             try {
-                Thread.sleep(200);
+                Thread.sleep(150);
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             }
         }
 
-        log.info("Multi-page sync complete: saved/updated a total of {} animals.", totalSaved);
         return totalSaved;
     }
 
@@ -224,7 +294,6 @@ public class RescueGroupsSyncService {
         String b = (breed != null ? breed.trim().toLowerCase() : "");
         String combined = (s + " " + b).trim();
 
-        // 1. Direct explicit API species matching
         if (s.equals("dog") || s.equals("dogs") || s.equals("canine")) return "Dog";
         if (s.equals("cat") || s.equals("cats") || s.equals("feline")) return "Cat";
         if (s.equals("bird") || s.equals("birds") || s.equals("avian")) return "Bird";
@@ -232,7 +301,6 @@ public class RescueGroupsSyncService {
         if (s.equals("horse") || s.equals("horses") || s.equals("equine")) return "Horse";
         if (s.contains("small") || s.contains("furry") || s.equals("rodent")) return "Small & Furry";
 
-        // 2. High-precision Dog Breed Signatures
         if (combined.contains("dog") || combined.contains("canine") || combined.contains("shepherd") ||
             combined.contains("poodle") || combined.contains("terrier") || combined.contains("retriever") ||
             combined.contains("hound") || combined.contains("pyrenees") || combined.contains("husky") ||
@@ -240,74 +308,39 @@ public class RescueGroupsSyncService {
             combined.contains("chihuahua") || combined.contains("pit bull") || combined.contains("bully") ||
             combined.contains("bulldog") || combined.contains("beagle") || combined.contains("boxer") ||
             combined.contains("rottweiler") || combined.contains("corgi") || combined.contains("dachshund") ||
-            combined.contains("pinscher") || combined.contains("schnauzer") || combined.contains("spaniel") ||
-            combined.contains("setter") || combined.contains("pointer") || combined.contains("great dane") ||
-            combined.contains("malamute") || combined.contains("akita") || combined.contains("cattle dog") ||
-            combined.contains("heeler") || combined.contains("kelpie") || combined.contains("whippet") ||
-            combined.contains("greyhound") || combined.contains("labrador") || combined.contains("golden") ||
-            combined.contains("bernese") || combined.contains("saint bernard") || combined.contains("newfoundland") ||
-            combined.contains("pug") || combined.contains("maltese") || combined.contains("shih tzu") ||
-            combined.contains("havanese") || combined.contains("bichon") || combined.contains("pomeranian") ||
-            combined.contains("australian shepherd") || combined.contains("dutch shepherd")) {
+            combined.contains("spaniel") || combined.contains("great dane") || combined.contains("australian shepherd")) {
             return "Dog";
         }
 
-        // 3. Cat Breed Signatures
         if (combined.contains("cat") || combined.contains("feline") || combined.contains("kitten") ||
-            combined.contains("shorthair") || combined.contains("longhair") || combined.contains("mediumhair") ||
-            combined.contains("siamese") || combined.contains("tabby") || combined.contains("persian") ||
-            combined.contains("maine coon") || combined.contains("calico") || combined.contains("tortoiseshell") ||
-            combined.contains("ragdoll") || combined.contains("bengal") || combined.contains("sphynx") ||
-            combined.contains("abyssinian") || combined.contains("burmese") || combined.contains("russian blue") ||
-            combined.contains("tuxedo") || combined.contains("domestic")) {
+            combined.contains("shorthair") || combined.contains("longhair") || combined.contains("siamese") ||
+            combined.contains("tabby") || combined.contains("persian") || combined.contains("maine coon")) {
             return "Cat";
         }
 
-        // 4. Bird Signatures (Pigeon, Dove, Parrot, etc.)
         if (combined.contains("bird") || combined.contains("pigeon") || combined.contains("dove") ||
-            combined.contains("parrot") || combined.contains("parakeet") || combined.contains("cockatiel") ||
-            combined.contains("cockatoo") || combined.contains("macaw") || combined.contains("conure") ||
-            combined.contains("finch") || combined.contains("canary") || combined.contains("lovebird") ||
-            combined.contains("budgie") || combined.contains("african grey") || combined.contains("chicken") ||
-            combined.contains("duck") || combined.contains("goose")) {
+            combined.contains("parrot") || combined.contains("parakeet") || combined.contains("cockatiel")) {
             return "Bird";
         }
 
-        // 5. Rabbit Signatures
-        if (combined.contains("rabbit") || combined.contains("bunny") || combined.contains("holland lop") ||
-            combined.contains("mini lop") || combined.contains("lionhead") || combined.contains("flemish giant") ||
-            combined.contains("netherland dwarf") || combined.contains("rex rabbit") || combined.contains("angora rabbit") ||
-            combined.contains("harlequin rabbit") || combined.contains("chinchilla rabbit")) {
+        if (combined.contains("rabbit") || combined.contains("bunny") || combined.contains("lop")) {
             return "Rabbit";
         }
 
-        // 6. Small & Furry Signatures
         if (combined.contains("guinea pig") || combined.contains("hamster") || combined.contains("ferret") ||
-            combined.contains("chinchilla") || combined.contains("hedgehog") || combined.contains("gerbil") ||
-            combined.contains("mouse") || combined.contains("rat") || combined.contains("sugar glider") ||
-            combined.contains("rodent")) {
+            combined.contains("chinchilla") || combined.contains("hedgehog") || combined.contains("gerbil")) {
             return "Small & Furry";
         }
 
-        // 7. Horse & Equine Signatures
-        if (combined.contains("horse") || combined.contains("equine") || combined.contains("pony") ||
-            combined.contains("thoroughbred") || combined.contains("quarter horse") || combined.contains("arabian horse") ||
-            combined.contains("appaloosa") || combined.contains("mustang") || combined.contains("clydesdale") ||
-            combined.contains("morgan horse") || combined.contains("warmblood") || combined.contains("stallion") ||
-            combined.contains("mare") || combined.contains("gelding") || combined.contains("foal")) {
+        if (combined.contains("horse") || combined.contains("equine") || combined.contains("pony")) {
             return "Horse";
         }
 
         if (rawSpecies != null && !rawSpecies.isBlank()) {
-            return capitalize(rawSpecies);
+            return rawSpecies.substring(0, 1).toUpperCase() + rawSpecies.substring(1).toLowerCase();
         }
 
         return "Dog";
-    }
-
-    private String capitalize(String str) {
-        if (str == null || str.isEmpty()) return str;
-        return str.substring(0, 1).toUpperCase() + str.substring(1).toLowerCase();
     }
 
     private String extractPictureUrl(RescueGroupsIncludedItem.IncludedAttributes attr) {
