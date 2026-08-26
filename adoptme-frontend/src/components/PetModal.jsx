@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Heart, MapPin, Check, Phone, Mail, Building2, Loader2, FileText, ExternalLink } from 'lucide-react';
+import { X, Heart, MapPin, Check, Phone, Mail, Building2, Loader2, FileText, ExternalLink, DollarSign } from 'lucide-react';
 import { useFavorites } from '../context/FavoritesContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -34,12 +34,10 @@ export default function PetModal({ animal, isOpen, onClose }) {
       return;
     }
 
-    // Unwrap if favorite entity returns animal nested under .animal
     const rawPet = animal.animal || animal;
     setFullAnimal(rawPet);
 
     const petId = rawPet.id || rawPet.animalId;
-    // Fetch full data if description or specific metadata is missing
     if (petId && (!rawPet.description || !rawPet.breed)) {
       setLoading(true);
       api.get(`/animals/${petId}`)
@@ -74,17 +72,17 @@ export default function PetModal({ animal, isOpen, onClose }) {
     }
   };
 
-  // Field normalization
   const petName = fullAnimal.name || fullAnimal.animalName || 'Adoptable Pet';
   const petGender = fullAnimal.gender || fullAnimal.sex || 'Unknown';
   const petBreed = fullAnimal.breed || fullAnimal.animalBreed || 'Domestic Mix';
   const petSpecies = fullAnimal.species || fullAnimal.animalSpecies || 'Pet';
-  const petAge = fullAnimal.age !== null && fullAnimal.age !== undefined ? `${fullAnimal.age} yrs` : 'Unknown age';
-  const petWeight = fullAnimal.weight
-    ? (typeof fullAnimal.weight === 'number' ? `${fullAnimal.weight} lbs` : fullAnimal.weight)
+  const petAge = fullAnimal.age !== null && fullAnimal.age !== undefined ? `${fullAnimal.age}` : 'Unknown age';
+  const petSize = fullAnimal.size || 'Medium';
+
+  const adoptionFee = fullAnimal.adoptionFee !== null && fullAnimal.adoptionFee !== undefined
+    ? `$${Number(fullAnimal.adoptionFee).toFixed(0)}`
     : null;
 
-  // Shelter normalization with fallback
   const shelterId = Number(
     fullAnimal.shelterId ||
     fullAnimal.shelter?.id ||
@@ -93,16 +91,16 @@ export default function PetModal({ animal, isOpen, onClose }) {
   const fallback = KNOWN_SHELTERS[shelterId] || KNOWN_SHELTERS[1];
 
   const shelterName = fullAnimal.shelterName || fullAnimal.shelter?.name || fallback.name;
-  const shelterLocation = fullAnimal.shelterAddress || fullAnimal.location || fullAnimal.shelter?.location || fullAnimal.shelter?.address || fallback.address;
-  const shelterPhone = fullAnimal.shelterPhone || fullAnimal.shelter?.phoneNumber || fullAnimal.shelter?.phone || fallback.phoneNumber;
+  const shelterLocation = fullAnimal.shelterAddress || fullAnimal.shelter?.address || fallback.address;
+  const shelterPhone = fullAnimal.shelterPhone || fullAnimal.shelter?.phoneNumber || fallback.phoneNumber;
   const shelterEmail = fullAnimal.shelterEmail || fullAnimal.shelter?.email || fallback.email;
-  const adoptionUrl = fullAnimal.adoptionUrl || fullAnimal.adoptionListingsUrl || fullAnimal.shelter?.adoptionListingsUrl;
+  const adoptionUrl = fullAnimal.adoptionUrl || fullAnimal.adoptionListingsUrl || fullAnimal.shelter?.adoptionListingsUrl || fullAnimal.shelter?.websiteUrl;
 
   const goodWithKids = fullAnimal.goodWithKids ?? fullAnimal.goodWithChildren ?? null;
   const goodWithDogs = fullAnimal.goodWithDogs ?? null;
   const goodWithCats = fullAnimal.goodWithCats ?? null;
 
-  const description = fullAnimal.description || `${petName} is an active, loving companion waiting for a forever home. Up to date on vaccinations and ready for adoption.`;
+  const description = fullAnimal.description || `${petName} is an active, loving companion looking for a forever home. Vaccinated and ready for adoption.`;
 
   return (
     <div 
@@ -113,7 +111,6 @@ export default function PetModal({ animal, isOpen, onClose }) {
         className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-[#0b1329] sm:p-8 transition-colors"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
         <button
           type="button"
           onClick={onClose}
@@ -129,13 +126,12 @@ export default function PetModal({ animal, isOpen, onClose }) {
         ) : (
           <>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              {/* Photo */}
+              {/* Photo & Favorite Action */}
               <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900">
                 <img
                   src={
                     fullAnimal.imageUrl ||
                     fullAnimal.photoUrl ||
-                    fullAnimal.image ||
                     'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=600&auto=format&fit=crop&q=80'
                   }
                   alt={petName}
@@ -156,7 +152,7 @@ export default function PetModal({ animal, isOpen, onClose }) {
                 </button>
               </div>
 
-              {/* Details & Attributes */}
+              {/* Attributes & Key Details */}
               <div className="flex flex-col justify-between space-y-4">
                 <div>
                   <div className="flex items-center justify-between pr-8">
@@ -183,12 +179,14 @@ export default function PetModal({ animal, isOpen, onClose }) {
                       <span className="text-[10px] text-slate-400 font-bold uppercase block">Age / Gender</span>
                       <span className="font-bold text-slate-800 dark:text-slate-200 block">{petAge} &bull; {petGender}</span>
                     </div>
-                    {petWeight && (
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-900/60 col-span-2">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Weight</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200 block">{petWeight}</span>
-                      </div>
-                    )}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-900/60">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Size</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 block">{petSize}</span>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 dark:border-emerald-900/40 dark:bg-emerald-950/30">
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase block">Adoption Fee</span>
+                      <span className="font-black text-emerald-700 dark:text-emerald-300 block">{adoptionFee || 'Inquire'}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -224,37 +222,37 @@ export default function PetModal({ animal, isOpen, onClose }) {
             {/* Description */}
             <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">About {petName}</h3>
-              <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+              <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 line-clamp-6">
                 {description}
               </p>
             </div>
 
-            {/* Adoption Application Call-To-Action Banner */}
+            {/* Application CTA */}
             <div className="mt-6">
               {adoptionUrl ? (
                 <a
                   href={adoptionUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-700 transition cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-700 transition cursor-pointer"
                 >
                   <FileText className="h-4 w-4" />
-                  <span>Adoption Application Form</span>
+                  <span>Submit Adoption Application</span>
                   <ExternalLink className="h-4 w-4 opacity-80" />
                 </a>
               ) : (
                 <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
-                  Sorry, we don't have the link for the application form at this time.
+                  Adoption application link available through direct shelter contact below.
                 </div>
               )}
             </div>
 
-            {/* Shelter Footer & Contact */}
+            {/* Shelter Footer */}
             <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-[#070d1e]">
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                  Hosted by: {shelterName}
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
+                  {shelterName}
                 </span>
               </div>
 

@@ -1,0 +1,2262 @@
+=== FILE: src/test/java/com/htabler0405/adoptme/controller/UserControllerTest.java ===
+package com.htabler0405.adoptme.controller;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.htabler0405.adoptme.controllers.UserController;
+import com.htabler0405.adoptme.dto.UpdatePasswordRequest;
+import com.htabler0405.adoptme.dto.UpdateUsernameRequest;
+import com.htabler0405.adoptme.exceptions.GlobalExceptionHandler;
+import com.htabler0405.adoptme.services.UserAccountOptionsService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.security.Principal;
+
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@ExtendWith(MockitoExtension.class)
+class UserControllerTest {
+
+    private MockMvc mockMvc;
+    private ObjectMapper objectMapper;
+
+    @Mock
+    private UserAccountOptionsService accountOptionsService;
+
+    @InjectMocks
+    private UserController userController;
+
+    @BeforeEach
+    void setUp() {
+        objectMapper = new ObjectMapper();
+        mockMvc = MockMvcBuilders.standaloneSetup(userController)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+    }
+
+    @Test
+    @DisplayName("PATCH /api/users/update/username - Success 204")
+    void updateUsername_Success() throws Exception {
+        UpdateUsernameRequest request = new UpdateUsernameRequest();
+        request.setCurrentPassword("SecurePassword123!");
+        request.setNewUsername("hunter_updated");
+
+        Principal mockPrincipal = () -> "1";
+
+        mockMvc.perform(patch("/api/users/update/username")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNoContent());
+
+        verify(accountOptionsService, times(1))
+                .updateUsername(eq(1L), eq("SecurePassword123!"), eq("hunter_updated"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/users/update/username - Incorrect Password 400")
+    void updateUsername_InvalidPassword_Returns400() throws Exception {
+        UpdateUsernameRequest request = new UpdateUsernameRequest();
+        request.setCurrentPassword("WrongPassword!");
+        request.setNewUsername("hunter_updated");
+
+        Principal mockPrincipal = () -> "1";
+
+        doThrow(new IllegalArgumentException("Incorrect current password."))
+                .when(accountOptionsService)
+                .updateUsername(1L, "WrongPassword!", "hunter_updated");
+
+        mockMvc.perform(patch("/api/users/update/username")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("PATCH /api/users/update/password - Success 204")
+    void updatePassword_Success() throws Exception {
+        UpdatePasswordRequest request = new UpdatePasswordRequest();
+        request.setCurrentPassword("SecurePassword123!");
+        request.setNewPassword("BrandNewPassword456!");
+
+        Principal mockPrincipal = () -> "1";
+
+        mockMvc.perform(patch("/api/users/update/password")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNoContent());
+
+        verify(accountOptionsService, times(1))
+                .updatePassword(eq(1L), eq("SecurePassword123!"), eq("BrandNewPassword456!"));
+    }
+}
+=== FILE: src/test/java/com/htabler0405/adoptme/AdoptmeApplicationTests.java ===
+package com.htabler0405.adoptme;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class AdoptmeApplicationTests {
+
+	@Test
+	void contextLoads() {
+	}
+
+}
+
+=== FILE: src/test/java/com/htabler0405/adoptme/service/UserServiceTest.java ===
+package com.htabler0405.adoptme.service;
+
+import com.htabler0405.adoptme.entities.User;
+import com.htabler0405.adoptme.exceptions.ResourceNotFoundException;
+import com.htabler0405.adoptme.repositories.UserRepository;
+import com.htabler0405.adoptme.services.UserAccountOptionsService;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class UserAccountOptionsServiceTest {
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
+    @InjectMocks
+    private UserAccountOptionsService service;
+
+    private User testUser;
+
+    @BeforeEach
+    void setUp() {
+        testUser = new User();
+        testUser.setId(1L);
+        testUser.setUsername("hunter");
+        testUser.setEmail("hunter@example.com");
+        testUser.setPassword("encoded_hash");
+    }
+
+    @Test
+    void updateUsername_ValidCredentials_SavesNewUsername() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(passwordEncoder.matches("raw_pass", "encoded_hash")).thenReturn(true);
+
+        service.updateUsername(1L, "raw_pass", "new_hunter");
+
+        assertEquals("new_hunter", testUser.getUsername());
+        verify(userRepository).save(testUser);
+    }
+
+    @Test
+    void updateUsername_InvalidPassword_ThrowsIllegalArgumentException() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(passwordEncoder.matches("bad_pass", "encoded_hash")).thenReturn(false);
+
+        assertThrows(IllegalArgumentException.class, () ->
+                service.updateUsername(1L, "bad_pass", "new_hunter")
+        );
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void updateUsername_UserNotFound_ThrowsResourceNotFoundException() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () ->
+                service.updateUsername(99L, "pass", "new_name")
+        );
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/ScrapedAnimalDto.java ===
+package com.htabler0405.adoptme.dto;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@NoArgsConstructor
+@Getter
+@Setter
+public class ScrapedAnimalDto {
+    private String sourceUrl;
+    private String name;
+    private String species;
+    private String breed;
+    private String age;
+    private String gender;
+    private String size;
+    private String description;
+    private String imageUrl;
+    private boolean hypoallergenic;
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/AnimalFilterRequest.java ===
+package com.htabler0405.adoptme.dto;
+
+import com.htabler0405.adoptme.sources.SourceType;
+
+import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+
+@Data
+@Getter
+@Setter
+public class AnimalFilterRequest{
+    private String description;
+    private String species;
+    private String breed;
+    private String size;
+    private String color;
+    private Boolean hypoallergenic;
+    private SourceType sourceType;
+    private String zipCode;
+    private Double latitude;
+    private Double longitude;
+    private Double radiusMiles;
+    private String gender;
+    private String age;
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/UpdatePasswordRequest.java ===
+package com.htabler0405.adoptme.dto;
+
+public class UpdatePasswordRequest {
+    private String currentPassword;
+    private String newPassword;
+
+    public String getCurrentPassword() { return currentPassword; }
+    public void setCurrentPassword(String currentPassword) { this.currentPassword = currentPassword; }
+
+    public String getNewPassword() { return newPassword; }
+    public void setNewPassword(String newPassword) { this.newPassword = newPassword; }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/ErrorResponseDto.java ===
+package com.htabler0405.adoptme.dto;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import java.time.LocalDateTime;
+
+public record ErrorResponseDto(
+    int status,
+    String message,
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    LocalDateTime timestamp
+) {
+    public ErrorResponseDto(int status, String message) {
+        this(status, message, LocalDateTime.now());
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/UpdateUsernameRequest.java ===
+package com.htabler0405.adoptme.dto;
+
+public class UpdateUsernameRequest {
+    private String currentPassword;
+    private String newUsername;
+
+    public String getCurrentPassword() { return currentPassword; }
+    public void setCurrentPassword(String currentPassword) { this.currentPassword = currentPassword; }
+
+    public String getNewUsername() { return newUsername; }
+    public void setNewUsername(String newUsername) { this.newUsername = newUsername; }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/CreateUserRequest.java ===
+package com.htabler0405.adoptme.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class CreateUserRequest {
+    private String username;
+    private String email;
+    private String password;
+    private String firstName;
+    private String lastName;
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/AnimalResponseDto.java ===
+package com.htabler0405.adoptme.dto;
+
+import com.htabler0405.adoptme.entities.AnimalProfile;
+import com.htabler0405.adoptme.entities.Shelter;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+@Getter
+@Setter
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class AnimalResponseDto {
+    private Long id;
+    private String name;
+    private String breed;
+    private String species;
+    private String gender;
+    private String age;
+    private String size;
+    private String color;
+    private String imageUrl;
+    private Boolean hypoallergenic;
+    private Boolean goodWithKids;
+    private Boolean goodWithDogs;
+    private Boolean goodWithCats;
+
+    // Shelter details
+    private Long shelterId;
+    private String shelterName;
+    private Double shelterLatitude;
+    private Double shelterLongitude;
+    private String adoptionUrl;
+
+    public AnimalResponseDto(AnimalProfile animal) {
+        this.id = animal.getId();
+        this.name = animal.getName();
+        this.breed = animal.getBreed();
+        this.species = animal.getSpecies();
+        this.gender = animal.getGender();
+        this.age = animal.getAge();
+        this.size = animal.getSize();
+        this.color = animal.getColor();
+        this.imageUrl = animal.getImageUrl();
+        this.hypoallergenic = animal.getHypoallergenic();
+        this.goodWithKids = animal.getGoodWithKids();
+        this.goodWithDogs = animal.getGoodWithDogs();
+        this.goodWithCats = animal.getGoodWithCats();
+
+        Shelter shelter = animal.getShelter();
+        if (shelter != null) {
+            this.shelterId = shelter.getId();
+            this.shelterName = shelter.getName();
+            this.adoptionUrl = shelter.getAdoptionListingsUrl();
+            
+            if (shelter.getLocation() != null && animal.getShelter().getLocation() != null) {
+                this.shelterLongitude = shelter.getLocation().getCoordinate().x;
+                this.shelterLatitude = shelter.getLocation().getCoordinate().y;
+            }
+        }
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/AuthResponse.java ===
+package com.htabler0405.adoptme.dto;
+
+public class AuthResponse {
+    private String token;
+    private Long userId;
+    private String email;
+
+    public AuthResponse(String token, Long userId, String email) {
+        this.token = token;
+        this.userId = userId;
+        this.email = email;
+    }
+
+    public String getToken() { return token; }
+    public Long getUserId() { return userId; }
+    public String getEmail() { return email; }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/LoginRequest.java ===
+package com.htabler0405.adoptme.dto;
+
+public class LoginRequest {
+    private String email;
+    private String password;
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/FeedbackResponse.java ===
+package com.htabler0405.adoptme.dto;
+
+import java.time.LocalDateTime;
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
+public class FeedbackResponse {
+    private Long id;
+    private String description;
+    private Integer rating;
+    private LocalDateTime createdAt;
+    private Long userId;
+    private String username;
+    private Long shelterId;
+    private String shelterName;
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/FeedbackRequest.java ===
+package com.htabler0405.adoptme.dto;
+
+import com.fasterxml.jackson.annotation.JsonAlias;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Getter
+@Setter
+@NoArgsConstructor
+public class FeedbackRequest {
+
+    private Long shelterId;
+    private Integer rating;
+
+    // Accepts either "description" or "comment" from JSON
+    @JsonAlias("comment")
+    private String description;
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/configuration/AutomatedDataIngestion.java ===
+package com.htabler0405.adoptme.configuration;
+
+import com.htabler0405.adoptme.entities.Shelter;
+import com.htabler0405.adoptme.repositories.AnimalShelterRepository;
+import com.htabler0405.adoptme.services.scraper.AnimalScraperService;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+
+import java.util.List;
+
+@Configuration
+@EnableScheduling
+public class AutomatedDataIngestion {
+/* 
+   private static final Logger log = LoggerFactory.getLogger(AutomatedDataIngestion.class);
+
+    private final AnimalScraperService animalScraperService;
+    private final AnimalShelterRepository shelterRepository;
+
+    public AutomatedDataIngestion(AnimalScraperService animalScraperService,
+                                  AnimalShelterRepository shelterRepository) {
+        this.animalScraperService = animalScraperService;
+        this.shelterRepository = shelterRepository;
+    }
+
+    @Bean
+    public CommandLineRunner runOnStartup() {
+        return args -> {
+            log.info("Starting automated shelter discovery and pet ingestion...");
+            runFullSyncPipeline();
+        };
+    }
+
+    @Scheduled(fixedRate = 43200000, initialDelay = 43200000) // Runs every 12 hours
+    public void runFullSyncPipeline() {
+        List<Shelter> allShelters = shelterRepository.findAll();
+        log.info("Starting listing scrapes across {} registered shelters", allShelters.size());
+
+        for (Shelter shelter : allShelters) {
+            try {
+                animalScraperService.scrapeAnimalsForShelter(shelter);
+            } catch (Exception e) {
+                log.error("Failed to scrape animals for {}: {}", shelter.getName(), e.getMessage());
+            }
+        }
+    }
+*/
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/configuration/SecurityConfig.java ===
+package com.htabler0405.adoptme.configuration;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthFilter;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter) {
+        this.jwtAuthFilter = jwtAuthFilter;
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable()) 
+            .cors(Customizer.withDefaults())
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                // Public auth & registration
+                .requestMatchers("/api/users/create", "/api/users/register").permitAll()
+                .requestMatchers("/api/auth/**").permitAll()
+                
+                // Public pet exploration & shelter lookups
+                .requestMatchers("/api/animals/**").permitAll()
+                .requestMatchers("/api/shelters/**").permitAll()
+                .requestMatchers("/api/feedback/**").permitAll()
+                
+                // Everything else (favorites, account updates, delete) requires JWT token
+                .anyRequest().authenticated()
+            )
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        
+        configuration.setAllowedOrigins(List.of(
+            "https://adoptme-ebon.vercel.app", 
+            "http://localhost:5173", 
+            "http://localhost:3000"
+        ));
+        
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept"));
+        configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/configuration/JwtAuthenticationFilter.java ===
+package com.htabler0405.adoptme.configuration;
+
+import com.htabler0405.adoptme.services.JwtService;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.Collections;
+
+@Component
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private final JwtService jwtService;
+
+    public JwtAuthenticationFilter(JwtService jwtService) {
+        this.jwtService = jwtService;
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+        
+        final String authHeader = request.getHeader("Authorization");
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        final String jwt = authHeader.substring(7);
+
+        if (jwtService.isTokenValid(jwt) && SecurityContextHolder.getContext().getAuthentication() == null) {
+            String email = jwtService.extractEmail(jwt);
+            Long userId = jwtService.extractUserId(jwt);
+
+            UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                    userId,
+                    null,
+                    Collections.emptyList()
+            );
+
+            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authToken);
+        }
+
+        filterChain.doFilter(request, response);
+    }
+}
+
+=== FILE: src/main/java/com/htabler0405/adoptme/configuration/GeometryConfig.java ===
+package com.htabler0405.adoptme.configuration;
+
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.PrecisionModel;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class GeometryConfig {
+
+    @Bean
+    public GeometryFactory geometryFactory() {
+        return new GeometryFactory(new PrecisionModel(), 4326);
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/repositories/AnimalShelterRepository.java ===
+package com.htabler0405.adoptme.repositories;
+
+import com.htabler0405.adoptme.entities.Shelter;
+import com.htabler0405.adoptme.sources.SourceType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface AnimalShelterRepository extends JpaRepository<Shelter, Long> {
+
+    List<Shelter> findBySourcetype(SourceType sourcetype); 
+
+    @Query(value = "SELECT * FROM shelters WHERE ST_DWithin(" +
+                   "CAST(location AS geography), " +
+                   "CAST(ST_SetSRID(ST_MakePoint(:lng, :lat), 4326) AS geography), " +
+                   ":radiusMeters)", 
+           nativeQuery = true)
+    List<Shelter> findNearbyShelters(@Param("lat") double lat, 
+                                     @Param("lng") double lng, 
+                                     @Param("radiusMeters") double radiusMeters);
+
+    Optional<Shelter> findByName(String name);
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/repositories/AnimalProfileRepository.java ===
+package com.htabler0405.adoptme.repositories;
+
+import com.htabler0405.adoptme.entities.AnimalProfile;
+import com.htabler0405.adoptme.entities.Shelter;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
+@Repository
+public interface AnimalProfileRepository extends JpaRepository<AnimalProfile, Long>, JpaSpecificationExecutor<AnimalProfile> {
+
+    List<AnimalProfile> findByBreed(String breed);
+
+    List<AnimalProfile> findBySizeAndBreed(String size, String breed); 
+
+    List<AnimalProfile> findByHypoallergenic(Boolean hypoallergenic);
+
+    List<AnimalProfile> findByShelterId(Long shelterId);
+
+    boolean existsByNameAndShelterId(String name, Long shelterId);
+
+    boolean existsByNameIgnoreCaseAndShelterId(String name, Long shelterId);
+
+    @Modifying
+    @Query("UPDATE AnimalProfile a SET a.status = 'ADOPTED', a.statusChangedAt = :now " +
+           "WHERE a.shelter = :shelter AND a.status = 'AVAILABLE' AND a.sourceUrl NOT IN :activeUrls")
+    int markMissingAnimalsAsAdopted(
+            @Param("shelter") Shelter shelter,
+            @Param("activeUrls") Set<String> activeUrls,
+            @Param("now") LocalDateTime now
+    );
+
+    Optional<AnimalProfile> findBySourceUrl(String sourceUrl);
+
+    @Query(value = """
+        SELECT a.* FROM animal_profiles a
+        JOIN shelters s ON a.shelter_id = s.id
+        WHERE ST_DWithin(
+            s.location::geography,
+            ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography,
+            (:radiusMiles * 1609.344)
+        )
+        AND a.status = 'AVAILABLE'
+    """, nativeQuery = true)
+    List<AnimalProfile> searchByLocation(
+            @Param("longitude") double longitude,
+            @Param("latitude") double latitude,
+            @Param("radiusMiles") double radiusMiles
+    );
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/repositories/UserRepository.java ===
+package com.htabler0405.adoptme.repositories;
+
+import com.htabler0405.adoptme.dto.CreateUserRequest;
+import com.htabler0405.adoptme.entities.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    boolean existsByEmail(String email);
+    Optional<User> findByEmail(String email);
+    void save(CreateUserRequest user);
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/repositories/FeedbackRepository.java ===
+package com.htabler0405.adoptme.repositories;
+
+import com.htabler0405.adoptme.entities.Feedback;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface FeedbackRepository extends JpaRepository<Feedback, Long> {
+    List<Feedback> findByShelterId(Long shelterId);
+    List<Feedback> findByUserId(Long userId);
+    List<Feedback> findByShelterIdOrderByCreatedAtDesc(Long shelterId);
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/exceptions/ResourceNotFoundException.java ===
+package com.htabler0405.adoptme.exceptions;
+
+public class ResourceNotFoundException extends RuntimeException {
+    public ResourceNotFoundException(String message) {
+        super(message);
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/exceptions/GlobalExceptionHandler.java ===
+package com.htabler0405.adoptme.exceptions;
+
+import io.jsonwebtoken.JwtException;
+import lombok.extern.slf4j.Slf4j;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import com.htabler0405.adoptme.dto.ErrorResponseDto;
+
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFound(ResourceNotFoundException ex) {
+        ErrorResponse error = new ErrorResponse(HttpStatus.NOT_FOUND.value(), ex.getMessage());
+        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(JwtException.class)
+    public ResponseEntity<ErrorResponse> handleJwtException(JwtException ex) {
+        ErrorResponse error = new ErrorResponse(HttpStatus.UNAUTHORIZED.value(), "Invalid or expired authentication token.");
+        return new ResponseEntity<>(error, HttpStatus.UNAUTHORIZED);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
+        ErrorResponse error = new ErrorResponse(HttpStatus.FORBIDDEN.value(), "Access denied: insufficient permissions.");
+        return new ResponseEntity<>(error, HttpStatus.FORBIDDEN);
+    }
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+            "status", 400,
+            "error", "Bad Request",
+            "message", ex.getMessage(),
+            "timestamp", LocalDateTime.now()
+        ));
+    }
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponseDto> handleAllUncaughtExceptions(Exception ex) {
+        log.error("Unhandled exception caught: ", ex);
+            
+        ErrorResponseDto error = new ErrorResponseDto(
+            HttpStatus.INTERNAL_SERVER_ERROR.value(),
+            ex.getMessage() != null ? ex.getMessage() : "An unexpected internal error occurred.",
+            LocalDateTime.now()
+        );
+            
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/exceptions/ErrorResponse.java ===
+package com.htabler0405.adoptme.exceptions;
+
+import java.time.LocalDateTime;
+
+public class ErrorResponse {
+    private int status;
+    private String message;
+    private LocalDateTime timestamp;
+
+    public ErrorResponse(int status, String message) {
+        this.status = status;
+        this.message = message;
+        this.timestamp = LocalDateTime.now();
+    }
+
+    public int getStatus() { return status; }
+    public String getMessage() { return message; }
+    public LocalDateTime getTimestamp() { return timestamp; }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/components/ShelterDatabaseInitializer.java ===
+package com.htabler0405.adoptme.components;
+
+import com.htabler0405.adoptme.entities.Shelter;
+import com.htabler0405.adoptme.repositories.AnimalShelterRepository;
+import com.htabler0405.adoptme.sources.SourceType;
+
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.Point;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.stereotype.Component;
+
+@Component
+public class ShelterDatabaseInitializer implements CommandLineRunner {
+
+    private final AnimalShelterRepository shelterRepository;
+    private final GeometryFactory geometryFactory;
+
+    public ShelterDatabaseInitializer(AnimalShelterRepository shelterRepository, GeometryFactory geometryFactory) {
+        this.shelterRepository = shelterRepository;
+        this.geometryFactory = geometryFactory;
+    }
+
+    @Override
+    public void run(String... args) {
+        if (shelterRepository.count() == 0) {
+            // 1. Berkeley County Humane Society
+            Point loc1 = geometryFactory.createPoint(new Coordinate(-77.9482, 39.4312));
+            Shelter s1 = new Shelter();
+            s1.setName("Berkeley County Humane Society");
+            s1.setAddress("554 Charles Town Rd, Martinsburg, WV");
+            s1.setZipCode("25405");
+            s1.setPhoneNumber("304-267-8389");
+            s1.setEmail("berkeleycountyhumanesociety@gmail.com");
+            s1.setWebsiteUrl("https://berkeley.wvhumane.com");
+            s1.setSourcetype(SourceType.SHELTER);
+            s1.setLocation(loc1);
+            shelterRepository.save(s1);
+
+            // 2. Animal Welfare Society of Jefferson County
+            Point loc2 = geometryFactory.createPoint(new Coordinate(-77.8597, 39.3498));
+            Shelter s2 = new Shelter();
+            s2.setName("Animal Welfare Society of Jefferson County");
+            s2.setAddress("23 Poor Farm Rd, Kearneysville, WV");
+            s2.setZipCode("25430");
+            s2.setPhoneNumber("304-725-0589");
+            s2.setEmail("awsmanager@awsjc.org");
+            s2.setWebsiteUrl("https://www.awsjc.org");
+            s2.setSourcetype(SourceType.SHELTER);
+            s2.setLocation(loc2);
+            shelterRepository.save(s2);
+        }
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/sources/SourceType.java ===
+package com.htabler0405.adoptme.sources;
+
+/**
+ * SourceType
+ */
+public enum SourceType {
+    SHELTER,
+    BREEDER;
+}
+
+=== FILE: src/main/java/com/htabler0405/adoptme/AdoptmeApplication.java ===
+package com.htabler0405.adoptme;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class AdoptmeApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(AdoptmeApplication.class, args);
+	}
+
+}
+
+=== FILE: src/main/java/com/htabler0405/adoptme/controllers/AuthController.java ===
+package com.htabler0405.adoptme.controllers;
+
+import com.htabler0405.adoptme.dto.AuthResponse;
+import com.htabler0405.adoptme.dto.LoginRequest;
+import com.htabler0405.adoptme.entities.User;
+import com.htabler0405.adoptme.repositories.UserRepository;
+import com.htabler0405.adoptme.services.JwtService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/auth")
+@CrossOrigin(origins = "http://localhost:5173")
+public class AuthController {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+
+    public AuthController(UserRepository userRepository, 
+                          PasswordEncoder passwordEncoder, 
+                          JwtService jwtService) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElse(null);
+
+        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("Invalid email or password");
+        }
+
+        String token = jwtService.generateToken(user.getId(), user.getEmail());
+
+        return ResponseEntity.ok(new AuthResponse(token, user.getId(), user.getEmail()));
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/controllers/AnimalController.java ===
+package com.htabler0405.adoptme.controllers;
+
+import org.springframework.web.bind.annotation.RestController;
+
+import com.htabler0405.adoptme.services.AnimalQueryService;
+import com.htabler0405.adoptme.dto.AnimalFilterRequest;
+import com.htabler0405.adoptme.dto.AnimalResponseDto;
+import com.htabler0405.adoptme.entities.AnimalProfile;
+
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+
+
+@RestController
+@RequestMapping("/api/animals")
+@CrossOrigin(origins = "http://localhost:5173")
+public class AnimalController {
+
+    private final AnimalQueryService animalQueryService;
+
+    public AnimalController(AnimalQueryService animalQueryService) {
+        this.animalQueryService = animalQueryService;
+    }
+
+    @PostMapping("/search")
+    public ResponseEntity<Page<AnimalResponseDto>> searchAnimals(@RequestBody AnimalFilterRequest filterRequest,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "16") int size,
+            @RequestParam(defaultValue = "id") String sortBy,
+            @RequestParam(defaultValue = "asc") String direction) {
+                
+        Sort sort = direction.equalsIgnoreCase("desc") 
+                ? Sort.by(sortBy).descending() 
+                : Sort.by(sortBy).ascending();
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        Page<AnimalProfile> matchedAnimals = animalQueryService.filterAnimals(filterRequest, pageable);
+        
+        Page<AnimalResponseDto> results = matchedAnimals.map(AnimalResponseDto::new);
+
+        return ResponseEntity.ok(results);
+    }
+    
+    @GetMapping("/{id:[0-9]+}")
+    public ResponseEntity<AnimalResponseDto> getAnimalById(@PathVariable Long id) {
+        return animalQueryService.findAnimalById(id)
+                .map(animal -> ResponseEntity.ok(new AnimalResponseDto(animal)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+    
+    
+}
+
+=== FILE: src/main/java/com/htabler0405/adoptme/controllers/ShelterController.java ===
+package com.htabler0405.adoptme.controllers;
+
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.htabler0405.adoptme.entities.Shelter;
+import com.htabler0405.adoptme.services.ShelterService;
+
+import java.util.List;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+
+@CrossOrigin(origins = "http://localhost:5173")
+@RequestMapping("/api/shelters")
+@RestController
+public class ShelterController {
+    private final ShelterService shelterService;
+
+    public ShelterController(ShelterService shelterService) {
+        this.shelterService = shelterService;
+    }
+    
+    @GetMapping
+    public ResponseEntity<List<Shelter>> getAllShelters() {
+        List<Shelter> allShelters = shelterService.getAllShelters();
+        return ResponseEntity.ok(allShelters);
+    }
+
+    @GetMapping("/{shelterId}")
+    public ResponseEntity<Shelter> getShelterById(@PathVariable Long shelterId) {
+        Shelter shelter = shelterService.getShelterById(shelterId);
+        return ResponseEntity.ok(shelter);
+    }
+
+    @GetMapping("/nearby")
+    public ResponseEntity<List<Shelter>> getNearbyShelters(
+            @RequestParam String zipCode,
+            @RequestParam(defaultValue = "25.0") double radiusMiles) {
+        
+        List<Shelter> shelters = shelterService.getNearbySheltersByLocation(zipCode, radiusMiles);
+        return ResponseEntity.ok(shelters);
+    }
+}
+
+=== FILE: src/main/java/com/htabler0405/adoptme/controllers/AdminIngestionController.java ===
+package com.htabler0405.adoptme.controllers;
+
+import com.htabler0405.adoptme.entities.Shelter;
+import com.htabler0405.adoptme.repositories.AnimalShelterRepository;
+import com.htabler0405.adoptme.services.scraper.AnimalScraperService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Map;
+@CrossOrigin(origins = "http://localhost:5173")
+@RestController
+@RequestMapping("/api/admin/ingest")
+public class AdminIngestionController {
+
+    private final AnimalScraperService animalScraperService;
+    private final AnimalShelterRepository shelterRepository;
+
+    public AdminIngestionController(AnimalScraperService animalScraperService,
+                                  AnimalShelterRepository shelterRepository) {
+        this.animalScraperService = animalScraperService;
+        this.shelterRepository = shelterRepository;
+    }
+
+    @PostMapping("/scrape")
+    public ResponseEntity<Map<String, Object>> triggerScrapeAll() {
+        List<Shelter> shelters = shelterRepository.findAll();
+        for (Shelter shelter : shelters) {
+            animalScraperService.scrapeAnimalsForShelter(shelter);
+        }
+        return ResponseEntity.ok(Map.of(
+                "status", "success",
+                "message", "Scrape completed for all registered shelters",
+                "sheltersProcessed", shelters.size()
+        ));
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/controllers/FeedbackController.java ===
+package com.htabler0405.adoptme.controllers;
+
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.htabler0405.adoptme.dto.FeedbackRequest;
+import com.htabler0405.adoptme.dto.FeedbackResponse;
+import com.htabler0405.adoptme.entities.User;
+import com.htabler0405.adoptme.services.FeedbackService;
+import com.htabler0405.adoptme.repositories.UserRepository;
+
+@CrossOrigin(origins = "http://localhost:5173")
+@RestController
+@RequestMapping("/api/feedback")
+public class FeedbackController {
+
+    private final FeedbackService feedbackService;
+    private final UserRepository userRepository;
+
+    public FeedbackController(FeedbackService feedbackService, UserRepository userRepository) {
+        this.feedbackService = feedbackService;
+        this.userRepository = userRepository;
+    }
+
+    @GetMapping
+    public ResponseEntity<List<FeedbackResponse>> getFeedback() {
+        return ResponseEntity.ok(feedbackService.getFeedback());
+    }
+
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<FeedbackResponse>> getUserFeedback(@PathVariable Long userId) {
+        return ResponseEntity.ok(feedbackService.getFeedbackForUser(userId));
+    }
+
+    @GetMapping("/shelter/{shelterId}")
+    public ResponseEntity<List<FeedbackResponse>> getShelterFeedback(@PathVariable Long shelterId) {
+        return ResponseEntity.ok(feedbackService.getFeedbackForShelter(shelterId));
+    }
+
+    @PostMapping
+    public ResponseEntity<FeedbackResponse> submitFeedback(
+            @RequestBody FeedbackRequest request,
+            Authentication authentication) {
+
+        Long userId = null;
+
+        if (authentication != null && authentication.getPrincipal() != null) {
+            Object principal = authentication.getPrincipal();
+            if (principal instanceof Long) {
+                userId = (Long) principal;
+            } else if (principal instanceof User) {
+                userId = ((User) principal).getId();
+            } else if (principal instanceof String) {
+                userRepository.findByEmail((String) principal)
+                    .ifPresent(u -> {});
+            }
+        }
+
+        FeedbackResponse saved = feedbackService.addFeedback(request, userId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/controllers/UserController.java ===
+package com.htabler0405.adoptme.controllers;
+
+import com.htabler0405.adoptme.dto.AnimalResponseDto;
+import com.htabler0405.adoptme.dto.CreateUserRequest;
+import com.htabler0405.adoptme.dto.UpdatePasswordRequest;
+import com.htabler0405.adoptme.dto.UpdateUsernameRequest;
+import com.htabler0405.adoptme.services.FavoriteAnimalService;
+import com.htabler0405.adoptme.services.UserAccountOptionsService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.security.Principal;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/users")
+@CrossOrigin(origins = "http://localhost:5173")
+public class UserController {
+
+    private final UserAccountOptionsService accountOptionsService;
+    private final FavoriteAnimalService favoriteService;
+
+    public UserController(UserAccountOptionsService accountOptionsService, FavoriteAnimalService favoriteService) {
+        this.accountOptionsService = accountOptionsService;
+        this.favoriteService = favoriteService;
+    }
+
+    @PostMapping("/create")
+    public ResponseEntity<?> createUser(@RequestBody CreateUserRequest request) {
+        accountOptionsService.createUser(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body("User registered successfully");
+    }
+
+    @DeleteMapping
+    public ResponseEntity<Void> deleteUser(Principal principal) {
+        Long userId = Long.parseLong(principal.getName());
+        accountOptionsService.deleteUser(userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/update/username")
+    public ResponseEntity<Void> updateUsername(
+            Principal principal,
+            @RequestBody UpdateUsernameRequest request) {
+
+        Long userId = Long.parseLong(principal.getName());
+
+        accountOptionsService.updateUsername(
+            userId, 
+            request.getCurrentPassword(), 
+            request.getNewUsername()
+        );
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/update/password")
+    public ResponseEntity<Void> updatePassword(
+            Principal principal,
+            @RequestBody UpdatePasswordRequest request) {
+
+        Long userId = Long.parseLong(principal.getName());
+
+        accountOptionsService.updatePassword(
+            userId, 
+            request.getCurrentPassword(), 
+            request.getNewPassword()
+        );
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/favorites/{animalId}")
+    public ResponseEntity<Void> addFavorite(
+            Principal principal, 
+            @PathVariable Long animalId) {
+        
+        Long userId = Long.parseLong(principal.getName());
+        favoriteService.addFavoriteAnimal(userId, animalId);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    @DeleteMapping("/favorites/{animalId}")
+    public ResponseEntity<Void> removeFavorite(
+            Principal principal, 
+            @PathVariable Long animalId) {
+        
+        Long userId = Long.parseLong(principal.getName());
+        favoriteService.removeFavoriteAnimal(userId, animalId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/favorites")
+    public ResponseEntity<List<AnimalResponseDto>> getUserFavorites(Principal principal) {
+        Long userId = Long.parseLong(principal.getName());
+        List<AnimalResponseDto> favorites = favoriteService.getUserFavoriteAnimal(userId);
+        return ResponseEntity.ok(favorites);
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/services/GeocodingService.java ===
+package com.htabler0405.adoptme.services;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.Point;
+import org.locationtech.jts.geom.PrecisionModel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
+
+@Service
+public class GeocodingService {
+
+    private static final Logger log = LoggerFactory.getLogger(GeocodingService.class);
+    private final RestTemplate restTemplate = new RestTemplate();
+    private final GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
+
+    /**
+     * Accepts a zip code or full street address and returns a PostGIS Point (X=Longitude, Y=Latitude).
+     */
+    public Point getCoordinatesFromAddressOrZip(String addressOrZip) {
+        if (addressOrZip == null || addressOrZip.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            // Properly builds and URL-encodes query params to prevent drops on spaces and punctuation
+            String url = UriComponentsBuilder.fromHttpUrl("https://nominatim.openstreetmap.org/search")
+                    .queryParam("q", addressOrZip.trim())
+                    .queryParam("format", "json")
+                    .queryParam("limit", "1")
+                    .build()
+                    .toUriString();
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("User-Agent", "AdoptMe-App/1.0 (contact@adoptme.local)");
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+
+            if (response.getBody() != null) {
+                JSONArray array = new JSONArray(response.getBody());
+
+                if (!array.isEmpty()) {
+                    JSONObject location = array.getJSONObject(0);
+                    
+                    double lat = location.getDouble("lat"); // Y
+                    double lon = location.getDouble("lon"); // X
+
+                    log.info("Geocoded '{}' -> Lat: {}, Lng: {}", addressOrZip, lat, lon);
+                    return geometryFactory.createPoint(new Coordinate(lon, lat));
+                } else {
+                    log.warn("Nominatim found 0 results for address: '{}'", addressOrZip);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Could not geocode address: {}. Error: {}", addressOrZip, e.getMessage());
+        }
+        return null;
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/services/scraper/AnimalScraperService.java ===
+package com.htabler0405.adoptme.services.scraper;
+
+import com.htabler0405.adoptme.entities.AnimalProfile;
+import com.htabler0405.adoptme.entities.Shelter;
+import com.htabler0405.adoptme.repositories.AnimalProfileRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+@Slf4j
+@Service
+public class AnimalScraperService {
+
+    private final AnimalProfileRepository animalRepository;
+
+    public AnimalScraperService(AnimalProfileRepository animalRepository) {
+        this.animalRepository = animalRepository;
+    }
+
+    @Transactional
+    public void scrapeAnimalsForShelter(Shelter shelter) {
+        List<String> urlsToScrape = determineListingUrls(shelter);
+        log.info("Starting live public web scrape for shelter '{}' across {} target URLs", shelter.getName(), urlsToScrape.size());
+
+        for (String url : urlsToScrape) {
+            scrapePage(url, shelter);
+        }
+    }
+
+    private List<String> determineListingUrls(Shelter shelter) {
+        List<String> urls = new ArrayList<>();
+        String name = shelter.getName().toLowerCase();
+
+        if (name.contains("jefferson") || shelter.getWebsiteUrl().contains("awsjc.org")) {
+            // Corrected AWSJC URLs
+            urls.add("https://www.awsjc.org/adopt-a-dog");
+            urls.add("https://www.awsjc.org/adopt-a-cat");
+        } else if (name.contains("berkeley") || shelter.getWebsiteUrl().contains("berkeley.wvhumane.com")) {
+            // Corrected Berkeley County URL
+            urls.add("https://berkeley.wvhumane.com/adopt-a-friend/");
+        } else if (shelter.getWebsiteUrl() != null && !shelter.getWebsiteUrl().isBlank()) {
+            urls.add(shelter.getWebsiteUrl());
+        }
+
+        return urls;
+    }
+
+    private void scrapePage(String url, Shelter shelter) {
+        log.info("Fetching public HTML from: {}", url);
+        try {
+            Document doc = Jsoup.connect(url)
+                    .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 AdoptMeApp/1.0 (Public Animal Rescue Indexer)")
+                    .timeout(15000)
+                    .get();
+
+            // Broad selector targeting pet cards, image blocks, summary items, and articles
+            Elements petBlocks = doc.select(".summary-item, article, .sqs-block-image, .pet-card, .animal-card, .entry-content .wp-block-image, div[class*='pet-item']");
+            log.info("Found {} candidate blocks on {}", petBlocks.size(), url);
+
+            int savedCount = 0;
+            for (Element block : petBlocks) {
+                // 1. Extract Name
+                Element titleEl = block.selectFirst("h1, h2, h3, h4, .summary-title, .image-title, .pet-name, a.summary-title-link");
+                String petName = "";
+                if (titleEl != null) {
+                    petName = titleEl.text().trim();
+                }
+
+                // If no heading, check image alt attribute
+                if (petName.isBlank()) {
+                    Element imgEl = block.selectFirst("img");
+                    if (imgEl != null && imgEl.hasAttr("alt")) {
+                        petName = imgEl.attr("alt").trim();
+                    }
+                }
+
+                // Clean name and skip non-pet generic elements
+                petName = sanitizePetName(petName);
+                if (petName.isBlank() || petName.length() > 30) {
+                    continue;
+                }
+
+                // 2. Extract Image URL
+                Element imgEl = block.selectFirst("img");
+                String imageUrl = "";
+                if (imgEl != null) {
+                    imageUrl = imgEl.hasAttr("data-src") ? imgEl.attr("data-src") : imgEl.attr("abs:src");
+                    if (imageUrl.isBlank()) {
+                        imageUrl = imgEl.attr("src");
+                    }
+                }
+
+                // 3. Extract Description
+                Element descEl = block.selectFirst(".summary-excerpt, .description, p, .entry-summary");
+                String description = (descEl != null && !descEl.text().isBlank())
+                        ? descEl.text().trim()
+                        : "Available for adoption at " + shelter.getName() + ". Visit " + url + " for adoption application details.";
+
+                // 4. Determine Species & Gender
+                String species = url.toLowerCase().contains("cat") ? "Cat" : "Dog";
+                String gender = inferGender(petName + " " + description);
+
+                // 5. Unique Source URL
+                Element linkEl = block.selectFirst("a[href]");
+                String sourceUrl = (linkEl != null && !linkEl.absUrl("href").isBlank())
+                        ? linkEl.absUrl("href")
+                        : url + "#" + petName.toLowerCase().replaceAll("[^a-z0-9]", "-");
+
+                // 6. Save or Update in PostgreSQL
+                AnimalProfile profile = animalRepository.findBySourceUrl(sourceUrl)
+                        .orElseGet(() -> {
+                            AnimalProfile p = new AnimalProfile();
+                            p.setSourceUrl(sourceUrl);
+                            p.setShelter(shelter);
+                            return p;
+                        });
+
+                profile.setName(petName);
+                profile.setSpecies(species);
+                profile.setBreed("Mixed Breed");
+                profile.setGender(gender);
+                profile.setAge("Adult");
+                profile.setSize("Medium");
+                if (!imageUrl.isBlank()) {
+                    profile.setImageUrl(imageUrl);
+                }
+                profile.setDescription(description);
+                profile.setStatus("AVAILABLE");
+                profile.setHypoallergenic(false);
+                profile.setLastSeenAt(LocalDateTime.now());
+
+                animalRepository.save(profile);
+                savedCount++;
+                log.info("Saved live scraped animal: '{}' ({}) from {}", petName, species, shelter.getName());
+            }
+
+            log.info("Finished parsing {}: persisted {} live animal profiles.", url, savedCount);
+
+        } catch (IOException e) {
+            log.error("Failed to scrape live HTML from {}: {}", url, e.getMessage());
+        }
+    }
+
+    private String sanitizePetName(String raw) {
+        if (raw == null) return "";
+        String cleaned = raw.replaceAll("(?i)(adoptable|available|featured|dog|cat|for adoption|meet|\\|)", "").trim();
+        if (cleaned.equalsIgnoreCase("donate") || cleaned.equalsIgnoreCase("foster") || cleaned.equalsIgnoreCase("home")) {
+            return "";
+        }
+        return cleaned;
+    }
+
+    private String inferGender(String text) {
+        String upper = text.toUpperCase();
+        if (upper.contains(" FEMALE ") || upper.contains(" SHE ") || upper.contains(" HER ") || upper.contains(" GIRL ")) {
+            return "FEMALE";
+        } else if (upper.contains(" MALE ") || upper.contains(" HE ") || upper.contains(" HIM ") || upper.contains(" BOY ")) {
+            return "MALE";
+        }
+        return "UNKNOWN";
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/services/JwtService.java ===
+package com.htabler0405.adoptme.services;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.security.Key;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
+
+@Service
+public class JwtService {
+
+    private final Key key;
+    private final long expirationMs;
+
+    public JwtService(
+            @Value("${jwt.secret}") String secret,
+            @Value("${jwt.expiration-ms:604800000}") long expirationMs) {
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.expirationMs = expirationMs;
+    }
+
+    public String generateToken(Long userId, String email) {
+        return Jwts.builder()
+                .setSubject(email)
+                .claim("userId", userId)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + expirationMs))
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String extractEmail(String token) {
+        return extractAllClaims(token).getSubject();
+    }
+
+
+    public Long extractUserId(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("userId", Long.class);
+    }
+
+    public boolean isTokenValid(String token) {
+        try {
+            Claims claims = extractAllClaims(token);
+            return !claims.getExpiration().before(new Date());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private Claims extractAllClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/services/ShelterService.java ===
+package com.htabler0405.adoptme.services;
+
+import com.htabler0405.adoptme.entities.Shelter;
+import com.htabler0405.adoptme.repositories.AnimalShelterRepository;
+
+import org.locationtech.jts.geom.Point;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Collections;
+import java.util.List;
+
+@Service
+public class ShelterService {
+    private final AnimalShelterRepository animalShelterRepository;
+    private final GeocodingService geocodingService;
+
+    public ShelterService(AnimalShelterRepository animalShelterRepository, GeocodingService geocodingService){
+        this.animalShelterRepository = animalShelterRepository;
+        this.geocodingService = geocodingService;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Shelter> getAllShelters(){
+        return animalShelterRepository.findAll();
+    }
+
+    @Transactional(readOnly = true)
+    public Shelter getShelterById(Long shelterId){
+        return animalShelterRepository.findById(shelterId)
+            .orElseThrow(() -> new RuntimeException("Shelter not found with id: " + shelterId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<Shelter> getNearbySheltersByLocation(String zipOrAddress, double radiusMiles) {
+            Point userPoint = geocodingService.getCoordinatesFromAddressOrZip(zipOrAddress);
+            if (userPoint == null) {
+                return Collections.emptyList();
+            }
+            double lng = userPoint.getCoordinate().x;
+            double lat = userPoint.getCoordinate().y;
+            double radiusMeters = radiusMiles * 1609.34; 
+
+            return animalShelterRepository.findNearbyShelters(lat, lng, radiusMeters);
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/services/FavoriteAnimalService.java ===
+package com.htabler0405.adoptme.services;
+
+import java.util.List;
+import java.util.Set;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.htabler0405.adoptme.repositories.AnimalProfileRepository;
+import com.htabler0405.adoptme.repositories.UserRepository;
+import com.htabler0405.adoptme.dto.AnimalResponseDto;
+import com.htabler0405.adoptme.entities.AnimalProfile;
+import com.htabler0405.adoptme.entities.User;
+import com.htabler0405.adoptme.exceptions.ResourceNotFoundException;
+
+@Service
+public class FavoriteAnimalService {
+    private final AnimalProfileRepository animalProfileRepository;
+    private final UserRepository userRepository;
+
+    public FavoriteAnimalService(AnimalProfileRepository animalProfileRepository, UserRepository userRepository) {
+        this.animalProfileRepository = animalProfileRepository;
+        this.userRepository = userRepository;
+    }
+    @Transactional
+    public void addFavoriteAnimal(Long userId, Long petId){
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
+        AnimalProfile animal = animalProfileRepository.findById(petId)
+            .orElseThrow(() -> new ResourceNotFoundException("Animal not found with id: " + petId));
+        
+        user.getFavoriteAnimals().add(animal);
+
+    }
+    @Transactional
+    public void removeFavoriteAnimal(Long userId, Long petId){
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+        AnimalProfile animal = animalProfileRepository.findById(petId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + petId));
+        
+        user.getFavoriteAnimals().remove(animal);
+
+    }
+
+    @Transactional(readOnly = true)
+    public  List<AnimalResponseDto> getUserFavoriteAnimal(Long userId){
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+    
+        Set<AnimalProfile> favorites = user.getFavoriteAnimals();
+        return favorites.stream()
+                .map(AnimalResponseDto::new)
+                .toList();
+    }
+    
+
+}
+
+=== FILE: src/main/java/com/htabler0405/adoptme/services/UserAccountOptionsService.java ===
+package com.htabler0405.adoptme.services;
+
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import com.htabler0405.adoptme.exceptions.ResourceNotFoundException;
+import com.htabler0405.adoptme.dto.CreateUserRequest;
+import com.htabler0405.adoptme.entities.User;
+import com.htabler0405.adoptme.repositories.UserRepository;
+
+@Service
+public class UserAccountOptionsService {
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    
+    public UserAccountOptionsService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Transactional
+    public void createUser(CreateUserRequest request){
+    if (userRepository.existsByEmail(request.getEmail())) {
+        throw new IllegalArgumentException("Email is already registered: " + request.getEmail());    
+    }
+        User user = new User();
+        user.setUsername(request.getUsername());
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void deleteUser(Long userId){
+        if(!userRepository.existsById(userId)){
+            throw new ResourceNotFoundException("User not found with id: " + userId);        
+        }
+        userRepository.deleteById(userId);
+    }
+
+
+    public User findByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+    }
+
+    @Transactional
+    public void updateUsername(Long userId, String currentPassword, String newUsername) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new IllegalArgumentException("Incorrect current password.");
+        }
+
+        user.setUsername(newUsername);
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void updatePassword(Long userId, String currentPassword, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new IllegalArgumentException("Incorrect current password.");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
+}
+
+=== FILE: src/main/java/com/htabler0405/adoptme/services/AnimalQueryService.java ===
+package com.htabler0405.adoptme.services;
+
+import com.htabler0405.adoptme.dto.AnimalFilterRequest;
+import com.htabler0405.adoptme.entities.AnimalProfile;
+import com.htabler0405.adoptme.repositories.AnimalProfileRepository;
+import jakarta.persistence.criteria.Predicate;
+import org.locationtech.jts.geom.Point;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class AnimalQueryService {
+
+    private final AnimalProfileRepository animalRepository;
+    private final GeocodingService geocodingService;
+
+    public AnimalQueryService(AnimalProfileRepository animalRepository, GeocodingService geocodingService) {
+        this.animalRepository = animalRepository;
+        this.geocodingService = geocodingService;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AnimalProfile> filterAnimals(AnimalFilterRequest filter, Pageable pageable) {
+        Specification<AnimalProfile> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if (filter.getSpecies() != null && !filter.getSpecies().isBlank()) {
+                predicates.add(cb.equal(cb.lower(root.get("species")), filter.getSpecies().toLowerCase()));
+            }
+            if (filter.getGender() != null && !filter.getGender().isBlank()) {
+                predicates.add(cb.equal(cb.upper(root.get("gender")), filter.getGender().toUpperCase()));
+            }
+            if (filter.getAge() != null && !filter.getAge().isBlank()) {
+                predicates.add(cb.equal(cb.lower(root.get("age")), filter.getAge().toLowerCase()));
+            }
+            if (filter.getBreed() != null && !filter.getBreed().isBlank()) {
+                predicates.add(cb.like(cb.lower(root.get("breed")), "%" + filter.getBreed().toLowerCase() + "%"));
+            }
+            if (filter.getSize() != null && !filter.getSize().isBlank()) {
+                predicates.add(cb.equal(cb.lower(root.get("size")), filter.getSize().toLowerCase()));
+            }
+            if (filter.getColor() != null && !filter.getColor().isBlank()) {
+                predicates.add(cb.equal(cb.lower(root.get("color")), filter.getColor().toLowerCase()));
+            }        
+            if (filter.getSourceType() != null) {
+                predicates.add(cb.equal(root.join("shelter").get("sourcetype"), filter.getSourceType()));            
+            }
+            if (filter.getHypoallergenic() != null) {
+                predicates.add(cb.equal(root.get("hypoallergenic"), filter.getHypoallergenic()));          
+            }
+            
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Double userLat = filter.getLatitude();
+        Double userLng = filter.getLongitude();
+
+        if ((userLat == null || userLng == null) && (filter.getZipCode() != null && !filter.getZipCode().isBlank())) {
+            Point userPoint = geocodingService.getCoordinatesFromAddressOrZip(filter.getZipCode());
+            if (userPoint != null) {
+                userLng = userPoint.getCoordinate().x;
+                userLat = userPoint.getCoordinate().y;
+            }
+        }
+
+        if (userLat != null && userLng != null && filter.getRadiusMiles() != null) {
+            List<AnimalProfile> allMatches = animalRepository.findAll(spec);
+            double finalLat = userLat;
+            double finalLng = userLng;
+            double maxMiles = filter.getRadiusMiles();
+
+            List<AnimalProfile> filteredList = allMatches.stream()
+                    .filter(animal -> isWithinRadius(animal, finalLat, finalLng, maxMiles))
+                    .toList();
+            int start = (int) pageable.getOffset();
+            int end = Math.min((start + pageable.getPageSize()), filteredList.size());
+            
+            List<AnimalProfile> pageContent = (start <= end) ? filteredList.subList(start, end) : Collections.emptyList();
+            return new PageImpl<>(pageContent, pageable, filteredList.size());
+        }
+
+        return animalRepository.findAll(spec, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<AnimalProfile> findAnimalById(Long animalId) {
+        return animalRepository.findById(animalId);
+    }
+
+    private boolean isWithinRadius(AnimalProfile animal, double userLat, double userLng, double maxDistanceMiles) {
+        if (animal.getShelter() == null || animal.getShelter().getLocation() == null) {
+            return false;
+        }
+
+        Point shelterPoint = animal.getShelter().getLocation();        
+        double shelterLng = shelterPoint.getCoordinate().x;
+        double shelterLat = shelterPoint.getCoordinate().y;
+
+        double earthRadiusMiles = 3958.8;
+        double dLat = Math.toRadians(shelterLat - userLat);
+        double dLng = Math.toRadians(shelterLng - userLng);
+
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(userLat)) * Math.cos(Math.toRadians(shelterLat)) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        double distance = earthRadiusMiles * c;
+
+        return distance <= maxDistanceMiles;
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/services/FeedbackService.java ===
+package com.htabler0405.adoptme.services;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.htabler0405.adoptme.dto.FeedbackRequest;
+import com.htabler0405.adoptme.dto.FeedbackResponse;
+import com.htabler0405.adoptme.entities.Feedback;
+import com.htabler0405.adoptme.entities.Shelter;
+import com.htabler0405.adoptme.entities.User;
+import com.htabler0405.adoptme.repositories.FeedbackRepository;
+import com.htabler0405.adoptme.repositories.AnimalShelterRepository;
+import com.htabler0405.adoptme.repositories.UserRepository;
+
+@Service
+public class FeedbackService {
+
+    private final FeedbackRepository feedbackRepository;
+    private final AnimalShelterRepository shelterRepository;
+    private final UserRepository userRepository;
+
+    public FeedbackService(
+            FeedbackRepository feedbackRepository,
+            AnimalShelterRepository shelterRepository,
+            UserRepository userRepository) {
+        this.feedbackRepository = feedbackRepository;
+        this.shelterRepository = shelterRepository;
+        this.userRepository = userRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public List<FeedbackResponse> getFeedback() {
+        return feedbackRepository.findAll().stream()
+                .map(this::toResponseDto)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<FeedbackResponse> getFeedbackForShelter(Long shelterId) {
+        return feedbackRepository.findByShelterIdOrderByCreatedAtDesc(shelterId).stream()
+                .map(this::toResponseDto)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<FeedbackResponse> getFeedbackForUser(Long userId) {
+        return feedbackRepository.findByUserId(userId).stream()
+                .map(this::toResponseDto)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public FeedbackResponse addFeedback(FeedbackRequest request, Long userId) {
+        User user = (userId != null) ? userRepository.findById(userId).orElse(null) : null;
+
+        Shelter shelter = shelterRepository.findById(request.getShelterId())
+                .orElseThrow(() -> new RuntimeException("Shelter not found with ID: " + request.getShelterId()));
+
+        Feedback feedback = new Feedback();
+        feedback.setDescription(request.getDescription());
+        
+        int selectedRating = (request.getRating() != null && request.getRating() >= 1 && request.getRating() <= 5)
+                ? request.getRating()
+                : 5;
+        feedback.setRating(selectedRating);
+
+        feedback.setUser(user);
+        feedback.setShelter(shelter);
+        feedback.setCreatedAt(LocalDateTime.now());
+
+        Feedback savedFeedback = feedbackRepository.save(feedback);
+        return toResponseDto(savedFeedback);
+    }
+
+    private FeedbackResponse toResponseDto(Feedback feedback) {
+        FeedbackResponse response = new FeedbackResponse();
+        response.setId(feedback.getId());
+        response.setDescription(feedback.getDescription());
+        response.setRating(feedback.getRating() != null ? feedback.getRating() : 5);
+        response.setCreatedAt(feedback.getCreatedAt());
+
+        if (feedback.getUser() != null) {
+            response.setUserId(feedback.getUser().getId());
+            response.setUsername(feedback.getUser().getUsername());
+        } else {
+            response.setUsername("Verified Adopter");
+        }
+
+        if (feedback.getShelter() != null) {
+            response.setShelterId(feedback.getShelter().getId());
+            response.setShelterName(feedback.getShelter().getName());
+        }
+
+        return response;
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/entities/Feedback.java ===
+package com.htabler0405.adoptme.entities;
+
+import java.time.LocalDateTime;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Getter
+@Setter
+@NoArgsConstructor
+@Entity
+@Table(name = "feedback")
+public class Feedback {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(name = "rating")
+    private Integer rating;
+    
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
+
+    @ManyToOne
+    @JoinColumn(name = "shelter_id")
+    private Shelter shelter;
+
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/entities/AnimalProfile.java ===
+package com.htabler0405.adoptme.entities;
+
+import java.time.LocalDateTime;
+
+import com.fasterxml.jackson.annotation.JsonBackReference;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@NoArgsConstructor
+@Getter
+@Setter
+@Entity
+@Table(name = "animal_profiles", indexes = {
+    @Index(name = "idx_animal_source_url", columnList = "sourceUrl", unique = true),
+    @Index(name = "idx_animal_shelter_status", columnList = "shelter_id, status")
+})
+public class AnimalProfile {
+    
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @JsonBackReference
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "shelter_id", nullable = false)
+    private Shelter shelter;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Column(unique = true, nullable = false)
+    private String sourceUrl;
+
+    @Column(nullable = false)
+    private String gender;
+    private String breed;
+    private String species;
+    private String age;
+    private String weight;
+    private String size;
+    private String color;
+
+    @Column(columnDefinition = "TEXT", length = 3000)
+    private String description;
+
+    @Column(nullable = false)
+    private String status = "AVAILABLE";
+
+    private LocalDateTime lastSeenAt;
+    private LocalDateTime statusChangedAt;
+
+    @Column(columnDefinition = "TEXT")
+    private String imageUrl;
+    
+    private Boolean hypoallergenic;
+    private Boolean goodWithKids;
+    private Boolean goodWithDogs;
+    private Boolean goodWithCats;
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/entities/User.java ===
+package com.htabler0405.adoptme.entities;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Getter
+@Setter
+@NoArgsConstructor
+@Entity
+@Table(name = "users")
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(unique = true, nullable = false)
+    private String email;
+
+    @Column(nullable = false)
+    private String password;
+
+    private String username;
+    private String firstName;
+    private String lastName;
+
+    @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @JoinTable(
+        name = "user_favorites", 
+        joinColumns = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "animal_id") 
+    )
+    private Set<AnimalProfile> favoriteAnimals = new HashSet<>();
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Feedback> feedbacks;
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/entities/Shelter.java ===
+package com.htabler0405.adoptme.entities;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.locationtech.jts.geom.Point;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.htabler0405.adoptme.sources.SourceType;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id; 
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "shelters")
+@Getter
+@Setter
+@NoArgsConstructor
+public class Shelter {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Enumerated(EnumType.STRING)
+    private SourceType sourcetype;
+
+    private String email;
+    private String phoneNumber;
+    private String address;
+    private String zipCode;
+    private String websiteUrl;
+    private String adoptionListingsUrl;
+
+    @JsonIgnore
+    @Column(columnDefinition = "geometry(Point, 4326)")
+    private Point location;
+
+    @JsonManagedReference
+    @OneToMany(mappedBy = "shelter", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<AnimalProfile> animals = new ArrayList<>();
+
+    @JsonProperty("latitude")
+    public Double getLatitude() {
+        return location != null ? location.getY() : null;
+    }
+
+    @JsonProperty("longitude")
+    public Double getLongitude() {
+        return location != null ? location.getX() : null;
+    }
+}

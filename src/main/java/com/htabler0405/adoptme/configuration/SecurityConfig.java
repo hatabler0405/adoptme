@@ -47,6 +47,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/shelters/**").permitAll()
                 .requestMatchers("/api/feedback/**").permitAll()
                 
+                // Public data ingestion sync endpoints
+                .requestMatchers("/api/admin/ingest/**").permitAll()
+                
                 // Everything else (favorites, account updates, delete) requires JWT token
                 .anyRequest().authenticated()
             )

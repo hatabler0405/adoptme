@@ -78,6 +78,9 @@ export default function FilterBar({ filters, setFilters, onReset }) {
             <option value="">All Species</option>
             <option value="DOG">Dogs</option>
             <option value="CAT">Cats</option>
+            <option value="BIRD">BIRD</option>
+            <option value="RABBIT">RABBIT</option>
+            <option value="BUNNY">BUNNY</option>
           </select>
         </div>
 

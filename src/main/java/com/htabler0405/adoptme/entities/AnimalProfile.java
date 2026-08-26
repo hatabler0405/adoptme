@@ -1,5 +1,6 @@
 package com.htabler0405.adoptme.entities;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
@@ -22,6 +23,9 @@ public class AnimalProfile {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "rescuegroups_pet_id", unique = true)
+    private Long rescuegroupsPetId;
     
     @JsonBackReference
     @ManyToOne(fetch = FetchType.LAZY)
@@ -45,6 +49,9 @@ public class AnimalProfile {
 
     @Column(columnDefinition = "TEXT", length = 3000)
     private String description;
+
+    @Column(name = "adoption_fee")
+    private BigDecimal adoptionFee; 
 
     @Column(nullable = false)
     private String status = "AVAILABLE";

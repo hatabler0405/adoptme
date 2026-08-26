@@ -5,6 +5,8 @@ import com.htabler0405.adoptme.entities.AnimalProfile;
 import com.htabler0405.adoptme.repositories.AnimalProfileRepository;
 import jakarta.persistence.criteria.Predicate;
 import org.locationtech.jts.geom.Point;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -14,11 +16,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
 @Service
 public class AnimalQueryService {
+
+    private static final Logger log = LoggerFactory.getLogger(AnimalQueryService.class);
 
     private final AnimalProfileRepository animalRepository;
     private final GeocodingService geocodingService;
@@ -50,14 +55,14 @@ public class AnimalQueryService {
             }
             if (filter.getColor() != null && !filter.getColor().isBlank()) {
                 predicates.add(cb.equal(cb.lower(root.get("color")), filter.getColor().toLowerCase()));
-            }        
+            }
             if (filter.getSourceType() != null) {
-                predicates.add(cb.equal(root.join("shelter").get("sourcetype"), filter.getSourceType()));            
+                predicates.add(cb.equal(root.join("shelter").get("sourcetype"), filter.getSourceType()));
             }
             if (filter.getHypoallergenic() != null) {
-                predicates.add(cb.equal(root.get("hypoallergenic"), filter.getHypoallergenic()));          
+                predicates.add(cb.equal(root.get("hypoallergenic"), filter.getHypoallergenic()));
             }
-            
+
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
@@ -67,25 +72,47 @@ public class AnimalQueryService {
         if ((userLat == null || userLng == null) && (filter.getZipCode() != null && !filter.getZipCode().isBlank())) {
             Point userPoint = geocodingService.getCoordinatesFromAddressOrZip(filter.getZipCode());
             if (userPoint != null) {
-                userLng = userPoint.getCoordinate().x;
-                userLat = userPoint.getCoordinate().y;
+                double val1 = userPoint.getCoordinate().x;
+                double val2 = userPoint.getCoordinate().y;
+                userLat = (val1 > 0) ? val1 : val2;
+                userLng = (val1 < 0) ? val1 : val2;
             }
         }
 
-        if (userLat != null && userLng != null && filter.getRadiusMiles() != null) {
-            List<AnimalProfile> allMatches = animalRepository.findAll(spec);
-            double finalLat = userLat;
-            double finalLng = userLng;
-            double maxMiles = filter.getRadiusMiles();
+        List<AnimalProfile> allMatches = animalRepository.findAll(spec);
+
+        // If radius is specified and > 0, filter strictly by radius
+        if (userLat != null && userLng != null && filter.getRadiusMiles() != null && filter.getRadiusMiles() > 0 && !allMatches.isEmpty()) {
+            final double finalLat = userLat;
+            final double finalLng = userLng;
+            final double maxMiles = filter.getRadiusMiles();
 
             List<AnimalProfile> filteredList = allMatches.stream()
                     .filter(animal -> isWithinRadius(animal, finalLat, finalLng, maxMiles))
+                    .sorted(Comparator.comparingDouble(a -> calculateDistance(a, finalLat, finalLng)))
                     .toList();
+
             int start = (int) pageable.getOffset();
             int end = Math.min((start + pageable.getPageSize()), filteredList.size());
-            
-            List<AnimalProfile> pageContent = (start <= end) ? filteredList.subList(start, end) : Collections.emptyList();
+
+            List<AnimalProfile> pageContent = (start < end) ? filteredList.subList(start, end) : Collections.emptyList();
             return new PageImpl<>(pageContent, pageable, filteredList.size());
+        }
+
+        // If "Any distance" is selected: Sort by distance from user's ZIP so closest shelters appear on page 1
+        if (userLat != null && userLng != null && !allMatches.isEmpty()) {
+            final double finalLat = userLat;
+            final double finalLng = userLng;
+
+            List<AnimalProfile> sortedList = allMatches.stream()
+                    .sorted(Comparator.comparingDouble(a -> calculateDistance(a, finalLat, finalLng)))
+                    .toList();
+
+            int start = (int) pageable.getOffset();
+            int end = Math.min((start + pageable.getPageSize()), sortedList.size());
+
+            List<AnimalProfile> pageContent = (start < end) ? sortedList.subList(start, end) : Collections.emptyList();
+            return new PageImpl<>(pageContent, pageable, sortedList.size());
         }
 
         return animalRepository.findAll(spec, pageable);
@@ -97,13 +124,21 @@ public class AnimalQueryService {
     }
 
     private boolean isWithinRadius(AnimalProfile animal, double userLat, double userLng, double maxDistanceMiles) {
+        double distance = calculateDistance(animal, userLat, userLng);
+        return distance <= maxDistanceMiles;
+    }
+
+    private double calculateDistance(AnimalProfile animal, double userLat, double userLng) {
         if (animal.getShelter() == null || animal.getShelter().getLocation() == null) {
-            return false;
+            return 9999.0;
         }
 
-        Point shelterPoint = animal.getShelter().getLocation();        
-        double shelterLng = shelterPoint.getCoordinate().x;
-        double shelterLat = shelterPoint.getCoordinate().y;
+        Point shelterPoint = animal.getShelter().getLocation();
+        double val1 = shelterPoint.getCoordinate().x;
+        double val2 = shelterPoint.getCoordinate().y;
+
+        double shelterLat = (val1 > 0) ? val1 : val2;
+        double shelterLng = (val1 < 0) ? val1 : val2;
 
         double earthRadiusMiles = 3958.8;
         double dLat = Math.toRadians(shelterLat - userLat);
@@ -114,8 +149,6 @@ public class AnimalQueryService {
                 Math.sin(dLng / 2) * Math.sin(dLng / 2);
 
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        double distance = earthRadiusMiles * c;
-
-        return distance <= maxDistanceMiles;
+        return earthRadiusMiles * c;
     }
 }

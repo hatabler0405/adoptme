@@ -56,4 +56,5 @@ public interface AnimalProfileRepository extends JpaRepository<AnimalProfile, Lo
             @Param("latitude") double latitude,
             @Param("radiusMiles") double radiusMiles
     );
+    Optional<AnimalProfile> findByRescuegroupsPetId(Long rescuegroupsPetId);
 }

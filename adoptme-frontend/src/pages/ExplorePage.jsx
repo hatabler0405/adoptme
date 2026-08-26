@@ -56,7 +56,7 @@ export default function ExplorePage() {
       setFilters((prev) => ({
         ...prev,
         breed: location.state.breed,
-        species: location.state.species ? location.state.species.toLowerCase() : prev.species,
+        species: location.state.species ? location.state.species.toUpperCase() : prev.species,
       }));
     }
   }, [location.state]);
@@ -73,28 +73,32 @@ export default function ExplorePage() {
       return;
     }
 
+    let isMounted = true;
     async function fetchZipCoords() {
       try {
         const res = await fetch(`https://api.zippopotam.us/us/${filters.zipCode.trim()}`);
         if (res.ok) {
           const data = await res.json();
           const place = data.places?.[0];
-          if (place) {
+          if (place && isMounted) {
             setUserCoords({
               latitude: parseFloat(place.latitude),
               longitude: parseFloat(place.longitude),
               name: `${place['place name']}, ${place['state abbreviation']}`,
             });
           }
-        } else {
+        } else if (isMounted) {
           setUserCoords(null);
         }
       } catch {
-        setUserCoords(null);
+        if (isMounted) setUserCoords(null);
       }
     }
 
     fetchZipCoords();
+    return () => {
+      isMounted = false;
+    };
   }, [filters.zipCode]);
 
   const fetchAnimals = useCallback(
@@ -102,28 +106,23 @@ export default function ExplorePage() {
       setLoading(true);
       setError('');
 
+      // Build payload matching backend AnimalFilterRequest contract strictly
       const payload = {};
-      if (filters.name?.trim()) payload.name = filters.name.trim();
       if (filters.breed?.trim()) payload.breed = filters.breed.trim();
-      if (filters.species) payload.species = filters.species;
-      if (filters.gender) payload.gender = filters.gender;
+      if (filters.species) payload.species = filters.species.toUpperCase();
+      if (filters.gender) payload.gender = filters.gender.toUpperCase();
       if (filters.size) payload.size = filters.size;
-      if (filters.minAge) payload.minAge = Number(filters.minAge);
-      if (filters.maxAge) payload.maxAge = Number(filters.maxAge);
-      if (filters.goodWithKids) payload.goodWithKids = true;
-      if (filters.goodWithDogs) payload.goodWithDogs = true;
-      if (filters.goodWithCats) payload.goodWithCats = true;
       if (filters.zipCode?.trim()) payload.zipCode = filters.zipCode.trim();
       if (filters.radius) payload.radiusMiles = parseFloat(filters.radius);
 
       try {
         const data = await animalService.searchAnimals(payload, pageToFetch, 16);
-        
-        if (data && data.content) {
+
+        if (data && Array.isArray(data.content)) {
           setRawAnimals(data.content);
-          setTotalPages(data.totalPages || 0);
-          setTotalElements(data.totalElements || 0);
-          setCurrentPage(data.number || 0);
+          setTotalPages(data.totalPages || 1);
+          setTotalElements(data.totalElements || data.content.length);
+          setCurrentPage(data.number || pageToFetch);
         } else if (Array.isArray(data)) {
           setRawAnimals(data);
           setTotalPages(1);
@@ -143,16 +142,10 @@ export default function ExplorePage() {
       }
     },
     [
-      filters.name,
       filters.breed,
       filters.species,
       filters.gender,
       filters.size,
-      filters.minAge,
-      filters.maxAge,
-      filters.goodWithKids,
-      filters.goodWithDogs,
-      filters.goodWithCats,
       filters.zipCode,
       filters.radius,
     ]
@@ -172,7 +165,6 @@ export default function ExplorePage() {
   const filteredAnimals = useMemo(() => {
     return rawAnimals
       .map((animal) => {
-        // Read real coordinates sent directly by the backend DTO
         const lat = animal.shelterLatitude ?? animal.shelter?.latitude ?? null;
         const lng = animal.shelterLongitude ?? animal.shelter?.longitude ?? null;
 
@@ -194,17 +186,33 @@ export default function ExplorePage() {
         };
       })
       .filter((animal) => {
-        if (userCoords && animal.distance !== null && filters.radius) {
-          const maxRadius = parseFloat(filters.radius);
-          return animal.distance <= maxRadius;
+        // Optional client-side quick filter for pet name if typed in FilterBar
+        if (filters.name?.trim()) {
+          const nameTerm = filters.name.toLowerCase().trim();
+          const matchName = animal.name?.toLowerCase().includes(nameTerm);
+          const matchBreed = animal.breed?.toLowerCase().includes(nameTerm);
+          if (!matchName && !matchBreed) return false;
         }
+
+        // Compatibility filters (only filter if explicitly true on UI)
+        if (filters.goodWithKids && animal.goodWithKids !== true) return false;
+        if (filters.goodWithDogs && animal.goodWithDogs !== true) return false;
+        if (filters.goodWithCats && animal.goodWithCats !== true) return false;
+
         return true;
       })
       .sort((a, b) => {
         if (a.distance !== null && b.distance !== null) return a.distance - b.distance;
         return 0;
       });
-  }, [rawAnimals, userCoords, filters.radius]);
+  }, [
+    rawAnimals,
+    userCoords,
+    filters.name,
+    filters.goodWithKids,
+    filters.goodWithDogs,
+    filters.goodWithCats,
+  ]);
 
   const handleReset = () => {
     setFilters({
@@ -226,7 +234,7 @@ export default function ExplorePage() {
   const handleSelectAnimal = async (animal) => {
     try {
       const res = await animalService.getAnimalById(animal.id);
-      setSelectedPet(res);
+      setSelectedPet(res || animal);
     } catch {
       setSelectedPet(animal);
     }

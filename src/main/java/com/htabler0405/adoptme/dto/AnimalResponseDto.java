@@ -1,5 +1,7 @@
 package com.htabler0405.adoptme.dto;
 
+import java.math.BigDecimal;
+
 import com.htabler0405.adoptme.entities.AnimalProfile;
 import com.htabler0405.adoptme.entities.Shelter;
 
@@ -27,6 +29,7 @@ public class AnimalResponseDto {
     private Boolean goodWithKids;
     private Boolean goodWithDogs;
     private Boolean goodWithCats;
+    private BigDecimal adoptionFee;
 
     // Shelter details
     private Long shelterId;
@@ -49,6 +52,7 @@ public class AnimalResponseDto {
         this.goodWithKids = animal.getGoodWithKids();
         this.goodWithDogs = animal.getGoodWithDogs();
         this.goodWithCats = animal.getGoodWithCats();
+        this.adoptionFee = animal.getAdoptionFee();
 
         Shelter shelter = animal.getShelter();
         if (shelter != null) {

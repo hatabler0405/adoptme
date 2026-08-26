@@ -25,4 +25,5 @@ public interface AnimalShelterRepository extends JpaRepository<Shelter, Long> {
                                      @Param("radiusMeters") double radiusMeters);
 
     Optional<Shelter> findByName(String name);
+    Optional<Shelter> findByRescuegroupsOrgId(Long rescuegroupsOrgId);
 }

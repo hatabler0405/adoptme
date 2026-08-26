@@ -1,11 +1,10 @@
-import React, { useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import React, { useMemo, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MapPin, Phone, ExternalLink, PawPrint, ChevronRight } from 'lucide-react';
 
-// Exact SVG Pin with zero rotation distortion — needle tip anchored at [16, 38]
 const customPinIcon = L.divIcon({
   className: 'custom-map-marker',
   html: `
@@ -17,14 +16,30 @@ const customPinIcon = L.divIcon({
     </div>
   `,
   iconSize: [32, 38],
-  iconAnchor: [16, 38], // Places the needle tip on the exact GPS coordinate
+  iconAnchor: [16, 38],
   popupAnchor: [0, -38],
 });
+
+function MapBoundsController({ markers }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!markers || markers.length === 0) return;
+
+    if (markers.length === 1) {
+      map.setView([markers[0].lat, markers[0].lng], 12);
+    } else {
+      const bounds = L.latLngBounds(markers.map((m) => [m.lat, m.lng]));
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
+    }
+  }, [markers, map]);
+
+  return null;
+}
 
 export default function PetMap({ animals = [], onSelectAnimal }) {
   const navigate = useNavigate();
 
-  // Aggregate active shelters using coordinates provided directly from the API response
   const activeMarkers = useMemo(() => {
     if (!Array.isArray(animals) || animals.length === 0) {
       return [];
@@ -37,7 +52,7 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
       const lat = animal.latitude ?? animal.shelterLatitude ?? animal.shelter?.latitude;
       const lng = animal.longitude ?? animal.shelterLongitude ?? animal.shelter?.longitude;
 
-      if (!shelterId || !lat || !lng) {
+      if (!shelterId || lat === null || lng === null || isNaN(Number(lat)) || isNaN(Number(lng))) {
         return;
       }
 
@@ -59,16 +74,19 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
   }, [animals]);
 
   const defaultCenter = [39.44026, -77.94054];
+  const centerPoint = activeMarkers.length > 0 ? [activeMarkers[0].lat, activeMarkers[0].lng] : defaultCenter;
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-3xl border border-gray-200 shadow-sm dark:border-gray-800">
       <MapContainer
-        center={activeMarkers.length > 0 ? [activeMarkers[0].lat, activeMarkers[0].lng] : defaultCenter}
-        zoom={12}
+        center={centerPoint}
+        zoom={10}
         scrollWheelZoom={false}
         className="h-full w-full"
         style={{ minHeight: '100%', height: '100%', width: '100%' }}
       >
+        <MapBoundsController markers={activeMarkers} />
+        
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -87,7 +105,6 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
           >
             <Popup className="custom-popup">
               <div className="p-1 min-w-60">
-                {/* Shelter Header */}
                 <div
                   onClick={() => navigate(`/shelters/${shelter.id}`)}
                   className="cursor-pointer group border-b border-gray-100 dark:border-gray-700 pb-2 hover:opacity-90"
@@ -112,7 +129,6 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
                   )}
                 </div>
 
-                {/* Available Pets Count */}
                 <div className="mt-2.5 flex items-center justify-between text-xs">
                   <span className="inline-flex items-center gap-1 font-semibold text-blue-600">
                     <PawPrint className="h-3.5 w-3.5" />
@@ -127,7 +143,6 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
                   </button>
                 </div>
 
-                {/* Pet Image Previews */}
                 {shelter.animals.length > 0 && (
                   <div className="mt-3 space-y-1.5 pt-2 border-t border-gray-100 dark:border-gray-700">
                     <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400">
@@ -157,11 +172,18 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
                         )}
 
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-                            {pet.name}
-                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                              {pet.name}
+                            </p>
+                            {pet.adoptionFee && (
+                              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                ${Number(pet.adoptionFee).toFixed(0)}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[10px] text-gray-500 truncate">
-                            {pet.breed || pet.species} &bull; {pet.age ? `${pet.age} yrs` : 'Young'}
+                            {pet.breed || pet.species} &bull; {pet.age ? `${pet.age}` : 'Young'}
                           </p>
                         </div>
                       </div>

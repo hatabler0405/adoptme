@@ -1,5 +1,6 @@
 package com.htabler0405.adoptme.entities;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,8 +36,14 @@ public class Shelter {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "rescuegroups_org_id", unique = true)
+    private Long rescuegroupsOrgId;
+
     @Column(nullable = false)
     private String name;
+
+    @Column(name = "default_adoption_fee")
+    private BigDecimal defaultAdoptionFee;
 
     @Enumerated(EnumType.STRING)
     private SourceType sourcetype;

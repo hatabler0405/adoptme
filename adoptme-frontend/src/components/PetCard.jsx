@@ -59,9 +59,17 @@ export default function PetCard({ animal, onSelect }) {
         >
           <Heart className={`h-4 w-4 ${favorited ? 'fill-current' : ''}`} />
         </button>
+
+        {/* Bottom Metadata Badges */}
         <div className="absolute bottom-2 left-2 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-md">
           {animal.species || 'Pet'}
         </div>
+
+        {animal.adoptionFee !== null && animal.adoptionFee !== undefined && (
+          <div className="absolute bottom-2 right-2 rounded-lg bg-emerald-600/90 px-2.5 py-1 text-xs font-bold text-white shadow-md backdrop-blur-md">
+            ${Number(animal.adoptionFee).toFixed(0)}
+          </div>
+        )}
       </div>
 
       {/* Info Section */}

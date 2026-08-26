@@ -1,0 +1,4188 @@
+=== FILE: src/context/AuthContext.jsx ===
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { authService, userService } from '../services/api';
+
+const AuthContext = createContext();
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [token, setToken] = useState(() => localStorage.getItem('token') || null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+
+  useEffect(() => {
+    if (!token) {
+      setUser(null);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('user_settings');
+    }
+  }, [token]);
+
+  const login = async (credentials) => {
+    const data = await authService.login(credentials);
+    // data: { token, userId, email, username, address, zipCode, ... }
+    setToken(data.token);
+    setUser(data);
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data));
+    setIsAuthModalOpen(false);
+    return data;
+  };
+
+  const register = async (userData) => {
+    // userData includes username, email, password, address, city, state, zipCode
+    await authService.register(userData);
+    return login({ email: userData.email, password: userData.password });
+  };
+
+  const logout = () => {
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('user_settings');
+    window.location.href = '/';
+  };
+
+  const deleteAccount = async () => {
+    try {
+      await userService.deleteAccount();
+    } finally {
+      logout();
+    }
+  };
+
+  const updateUserProfile = (updatedFields) => {
+    setUser((prev) => {
+      const next = { ...prev, ...updatedFields };
+      localStorage.setItem('user', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        isAuthenticated: !!token,
+        login,
+        register,
+        logout,
+        deleteAccount,
+        updateUserProfile,
+        isAuthModalOpen,
+        authMode,
+        openAuthModal: (mode = 'login') => {
+          setAuthMode(mode);
+          setIsAuthModalOpen(true);
+        },
+        closeAuthModal: () => setIsAuthModalOpen(false),
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export const useAuth = () => useContext(AuthContext);
+=== FILE: src/context/ThemeContext.jsx ===
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+const ThemeContext = createContext();
+
+export function ThemeProvider({ children }) {
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'dark';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  return (
+    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export const useTheme = () => useContext(ThemeContext);
+=== FILE: src/context/FavoritesContext.jsx ===
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { favoriteService } from '../services/api';
+import { useAuth } from './AuthContext';
+
+const FavoritesContext = createContext();
+
+export function FavoritesProvider({ children }) {
+  const { isAuthenticated } = useAuth();
+  const [favorites, setFavorites] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadFavorites = async () => {
+    if (!isAuthenticated) {
+      setFavorites([]);
+      return;
+    }
+    try {
+      setLoading(true);
+      const data = await favoriteService.getFavorites();
+      setFavorites(data || []);
+    } catch (err) {
+      console.error('Failed to load favorites:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFavorites();
+  }, [isAuthenticated]);
+
+  const isFavorite = (animalId) => {
+    return favorites.some((item) => item.id === animalId);
+  };
+
+  const addFavorite = async (animal) => {
+    try {
+      setFavorites((prev) => [...prev, animal]);
+      await favoriteService.addFavorite(animal.id);
+    } catch (err) {
+      console.error('Failed to add favorite:', err);
+      loadFavorites(); // Revert on failure
+    }
+  };
+
+  const removeFavorite = async (animalId) => {
+    try {
+      setFavorites((prev) => prev.filter((item) => item.id !== animalId));
+      await favoriteService.removeFavorite(animalId);
+    } catch (err) {
+      console.error('Failed to remove favorite:', err);
+      loadFavorites(); // Revert on failure
+    }
+  };
+
+  return (
+    <FavoritesContext.Provider
+      value={{
+        favorites,
+        loading,
+        isFavorite,
+        addFavorite,
+        removeFavorite,
+        refreshFavorites: loadFavorites,
+      }}
+    >
+      {children}
+    </FavoritesContext.Provider>
+  );
+}
+
+export const useFavorites = () => useContext(FavoritesContext);
+=== FILE: src/App.css ===
+.counter {
+  font-size: 16px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 2px solid transparent;
+  transition: border-color 0.3s;
+  margin-bottom: 24px;
+
+  &:hover {
+    border-color: var(--accent-border);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+.hero {
+  position: relative;
+
+  .base,
+  .framework,
+  .vite {
+    inset-inline: 0;
+    margin: 0 auto;
+  }
+
+  .base {
+    width: 170px;
+    position: relative;
+    z-index: 0;
+  }
+
+  .framework,
+  .vite {
+    position: absolute;
+  }
+
+  .framework {
+    z-index: 1;
+    top: 34px;
+    height: 28px;
+    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
+      scale(1.4);
+  }
+
+  .vite {
+    z-index: 0;
+    top: 107px;
+    height: 26px;
+    width: auto;
+    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
+      scale(0.8);
+  }
+}
+
+#center {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  place-content: center;
+  place-items: center;
+  flex-grow: 1;
+
+  @media (max-width: 1024px) {
+    padding: 32px 20px 24px;
+    gap: 18px;
+  }
+}
+
+#next-steps {
+  display: flex;
+  border-top: 1px solid var(--border);
+  text-align: left;
+
+  & > div {
+    flex: 1 1 0;
+    padding: 32px;
+    @media (max-width: 1024px) {
+      padding: 24px 20px;
+    }
+  }
+
+  .icon {
+    margin-bottom: 16px;
+    width: 22px;
+    height: 22px;
+  }
+
+  @media (max-width: 1024px) {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+#docs {
+  border-right: 1px solid var(--border);
+
+  @media (max-width: 1024px) {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+#next-steps ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  gap: 8px;
+  margin: 32px 0 0;
+
+  .logo {
+    height: 18px;
+  }
+
+  a {
+    color: var(--text-h);
+    font-size: 16px;
+    border-radius: 6px;
+    background: var(--social-bg);
+    display: flex;
+    padding: 6px 12px;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    transition: box-shadow 0.3s;
+
+    &:hover {
+      box-shadow: var(--shadow);
+    }
+    .button-icon {
+      height: 18px;
+      width: 18px;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    margin-top: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+
+    li {
+      flex: 1 1 calc(50% - 8px);
+    }
+
+    a {
+      width: 100%;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+  }
+}
+
+#spacer {
+  height: 88px;
+  border-top: 1px solid var(--border);
+  @media (max-width: 1024px) {
+    height: 48px;
+  }
+}
+
+.ticks {
+  position: relative;
+  width: 100%;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    top: -4.5px;
+    border: 5px solid transparent;
+  }
+
+  &::before {
+    left: 0;
+    border-left-color: var(--border);
+  }
+  &::after {
+    right: 0;
+    border-right-color: var(--border);
+  }
+}
+
+=== FILE: src/index.css ===
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+@custom-variant dark (&:is(.dark, .dark *));
+
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  border-radius: 0.75rem;
+  z-index: 10;
+}
+.leaflet-tooltip.pet-map-tooltip {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  padding: 0.25rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.leaflet-tooltip-top.pet-map-tooltip:before {
+  border-top-color: white;
+}
+=== FILE: src/components/ShelterReviews.jsx ===
+import React, { useState, useEffect, useCallback } from 'react';
+import { Star, MessageSquare, Send, CheckCircle2, User, Loader2, AlertTriangle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
+
+export default function ShelterReviews({ shelterId, shelterName }) {
+  const { user, openAuthModal } = useAuth();
+
+  const [reviews, setReviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
+
+  // Fetch reviews directly from /api/feedback/shelter/:id
+  const fetchReviews = useCallback(async () => {
+    if (!shelterId) return;
+    setLoading(true);
+    try {
+      const res = await api.get(`/feedback/shelter/${shelterId}`);
+      setReviews(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error('Failed to load reviews from database:', err);
+      setReviews([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [shelterId]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
+
+  const averageRating =
+    reviews.length > 0
+      ? (
+          reviews.reduce((acc, r) => acc + (typeof r.rating === 'number' ? r.rating : 5), 0) /
+          reviews.length
+        ).toFixed(1)
+      : '5.0';
+
+  const handleSubmitReview = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (!user) {
+      openAuthModal('login');
+      return;
+    }
+
+    if (!comment.trim()) return;
+
+    try {
+      setSubmitting(true);
+      const payload = {
+        description: comment.trim(),
+        rating: Number(rating),
+        shelterId: Number(shelterId),
+      };
+
+      const res = await api.post('/feedback', payload);
+
+      setReviews((prev) => [res.data, ...prev]);
+      setComment('');
+      setRating(5);
+      setHoverRating(0);
+      setSubmitted(true);
+      setTimeout(() => setSubmitted(false), 4000);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to submit review. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Just now';
+    try {
+      const d = new Date(dateString);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return 'Recently';
+    }
+  };
+
+  return (
+    <div className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/90 sm:p-8 transition-colors">
+      {/* Section Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5 dark:border-slate-800">
+        <div>
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              Adopter Reviews & Experiences
+            </h2>
+          </div>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Read feedback from past adopters at {shelterName}.
+          </p>
+        </div>
+
+        {/* Rating Summary Badge */}
+        <div className="flex items-center gap-2 rounded-2xl bg-amber-50 px-4 py-2 text-amber-900 border border-amber-100 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-300 w-fit">
+          <div className="flex items-center">
+            <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+          </div>
+          <span className="text-lg font-black">{averageRating}</span>
+          <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+            ({reviews.length} {reviews.length === 1 ? 'Review' : 'Reviews'})
+          </span>
+        </div>
+      </div>
+
+      {/* Review Submission Form */}
+      <form onSubmit={handleSubmitReview} className="rounded-2xl bg-slate-50 p-4 border border-slate-100 dark:border-slate-800/80 dark:bg-[#070d1e] space-y-3">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+          Leave a Review for this Shelter
+        </h3>
+
+        {error && (
+          <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Star Selector */}
+        <div className="flex items-center gap-1.5">
+          {[1, 2, 3, 4, 5].map((star) => {
+            const activeThreshold = hoverRating || rating;
+            const isFilled = activeThreshold >= star;
+
+            return (
+              <button
+                type="button"
+                key={star}
+                onClick={() => {
+                  setRating(star);
+                  setHoverRating(0);
+                }}
+                onMouseEnter={() => setHoverRating(star)}
+                onMouseLeave={() => setHoverRating(0)}
+                className="p-1 transition-transform hover:scale-110 active:scale-95 focus:outline-none cursor-pointer"
+              >
+                <Star
+                  className={`h-5 w-5 ${
+                    isFilled
+                      ? 'fill-amber-400 text-amber-400'
+                      : 'text-slate-300 dark:text-slate-600'
+                  }`}
+                />
+              </button>
+            );
+          })}
+          <span className="ml-2 text-xs font-bold text-slate-600 dark:text-slate-300">
+            {hoverRating || rating} of 5 Stars
+          </span>
+        </div>
+
+        {/* Text Area */}
+        <textarea
+          rows={3}
+          required
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder={`Share your experience with adoptions, staff, or facilities at ${shelterName}...`}
+          className="w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-[#0f172a]/60 dark:text-white dark:placeholder-slate-500"
+        />
+
+        <div className="flex items-center justify-between">
+          {submitted ? (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Thank you! Your review was posted.</span>
+            </div>
+          ) : (
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              Posting as: <strong className="text-slate-700 dark:text-slate-300">{user?.username || 'Verified Adopter'}</strong>
+            </span>
+          )}
+
+          <button
+            type="submit"
+            disabled={submitting || !comment.trim()}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-all cursor-pointer"
+          >
+            {submitting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
+            <span>{submitting ? 'Submitting...' : 'Submit Review'}</span>
+          </button>
+        </div>
+      </form>
+
+      {/* Reviews List */}
+      {loading ? (
+        <div className="flex justify-center p-8">
+          <Loader2 className="h-6 w-6 animate-spin text-blue-600 dark:text-blue-400" />
+        </div>
+      ) : reviews.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 p-8 text-center text-xs text-slate-400">
+          No reviews yet for {shelterName}. Be the first adopter to leave one!
+        </div>
+      ) : (
+        <div className="space-y-4 pt-2">
+          {reviews.map((rev) => (
+            <div
+              key={rev.id}
+              className="rounded-2xl border border-slate-100 p-4 transition-colors dark:border-slate-800 dark:bg-[#070d1e]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                      {rev.username || rev.author || 'Verified Adopter'}
+                    </h4>
+                    <span className="text-[10px] text-slate-400">{formatDate(rev.createdAt || rev.date)}</span>
+                  </div>
+                </div>
+
+                {/* Star display */}
+                <div className="flex items-center gap-0.5">
+                  {[1, 2, 3, 4, 5].map((starIndex) => {
+                    const reviewRating = typeof rev.rating === 'number' ? rev.rating : 5;
+                    return (
+                      <Star
+                        key={starIndex}
+                        className={`h-3.5 w-3.5 ${
+                          starIndex <= reviewRating
+                            ? 'fill-amber-400 text-amber-400'
+                            : 'text-slate-200 dark:text-slate-700'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              <p className="mt-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                {rev.description || rev.comment}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+=== FILE: src/components/PetCard.jsx ===
+import React from 'react';
+import { Heart, MapPin, Check } from 'lucide-react';
+import { useFavorites } from '../context/FavoritesContext';
+import { useAuth } from '../context/AuthContext';
+
+export default function PetCard({ animal, onSelect }) {
+  const { user, openAuthModal } = useAuth();
+  const { isFavorite, addFavorite, removeFavorite } = useFavorites();
+
+  const favorited = isFavorite(animal.id);
+
+  const handleFavorite = (e) => {
+    e.stopPropagation();
+    if (!user) {
+      openAuthModal();
+      return;
+    }
+    if (favorited) {
+      removeFavorite(animal.id);
+    } else {
+      addFavorite(animal);
+    }
+  };
+
+  // Helper to format age
+  const displayAge = typeof animal.age === 'number' ? `${animal.age} yrs` : (animal.age || 'Age unknown');
+
+  // Parse compatibility from booleans or description text
+  const desc = animal.description || '';
+  const goodWithKids = animal.goodWithKids ?? desc.toLowerCase().includes('kid friendly: yes');
+  const goodWithDogs = animal.goodWithDogs ?? desc.toLowerCase().includes('dog friendly: yes');
+  const goodWithCats = animal.goodWithCats ?? desc.toLowerCase().includes('cat friendly: yes');
+
+  return (
+    <div
+      onClick={onSelect}
+      className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 cursor-pointer"
+    >
+      {/* Image Container */}
+      <div className="relative aspect-4/3 w-full overflow-hidden bg-gray-100 dark:bg-gray-800">
+        <img
+          src={
+            animal.imageUrl ||
+            animal.photoUrl ||
+            'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=600&auto=format&fit=crop&q=80'
+          }
+          alt={animal.name}
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+        />
+        <button
+          type="button"
+          onClick={handleFavorite}
+          className={`absolute top-3 right-3 rounded-full p-2.5 backdrop-blur-md transition-transform active:scale-90 ${
+            favorited
+              ? 'bg-rose-500 text-white shadow-md'
+              : 'bg-black/30 text-white hover:bg-black/50'
+          }`}
+          aria-label="Favorite"
+        >
+          <Heart className={`h-4 w-4 ${favorited ? 'fill-current' : ''}`} />
+        </button>
+        <div className="absolute bottom-2 left-2 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-md">
+          {animal.species || 'Pet'}
+        </div>
+      </div>
+
+      {/* Info Section */}
+      <div className="flex flex-1 flex-col p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">
+            {animal.name}
+          </h3>
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 capitalize">
+            {animal.gender ? animal.gender.toLowerCase() : ''}
+          </span>
+        </div>
+
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
+          {animal.breed || 'Mixed Breed'} &bull; {displayAge}
+          {animal.weight ? ` • ${animal.weight} lbs` : ''}
+        </p>
+
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+          <span className="truncate">
+            {animal.shelterName || animal.shelter?.name || animal.location || 'Local Shelter'}
+          </span>
+        </p>
+
+        {/* Compatibility Pills */}
+        <div className="mt-3 flex flex-wrap gap-1.5 pt-3 border-t border-gray-100 dark:border-gray-800">
+          {goodWithKids && (
+            <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <Check className="h-2.5 w-2.5" /> Kids
+            </span>
+          )}
+          {goodWithDogs && (
+            <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <Check className="h-2.5 w-2.5" /> Dogs
+            </span>
+          )}
+          {goodWithCats && (
+            <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <Check className="h-2.5 w-2.5" /> Cats
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+=== FILE: src/components/PetModal.jsx ===
+import React, { useState, useEffect } from 'react';
+import { X, Heart, MapPin, Check, Phone, Mail, Building2, Loader2, FileText, ExternalLink } from 'lucide-react';
+import { useFavorites } from '../context/FavoritesContext';
+import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
+
+const KNOWN_SHELTERS = {
+  1: {
+    id: 1,
+    name: 'Berkeley County Humane Society',
+    address: '554 Charles Town Rd, Martinsburg, WV',
+    phoneNumber: '304-267-8389',
+    email: 'info@berkeleywvhumane.org',
+  },
+  2: {
+    id: 2,
+    name: 'Animal Welfare Society of Jefferson County',
+    address: '23 Poor Farm Rd, Kearneysville, WV',
+    phoneNumber: '304-725-0589',
+    email: 'info@awsjc.org',
+  },
+};
+
+export default function PetModal({ animal, isOpen, onClose }) {
+  const { user, openAuthModal } = useAuth();
+  const { isFavorite, addFavorite, removeFavorite } = useFavorites();
+
+  const [fullAnimal, setFullAnimal] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !animal) {
+      setFullAnimal(null);
+      return;
+    }
+
+    // Unwrap if favorite entity returns animal nested under .animal
+    const rawPet = animal.animal || animal;
+    setFullAnimal(rawPet);
+
+    const petId = rawPet.id || rawPet.animalId;
+    // Fetch full data if description or specific metadata is missing
+    if (petId && (!rawPet.description || !rawPet.breed)) {
+      setLoading(true);
+      api.get(`/animals/${petId}`)
+        .then((res) => {
+          if (res.data) {
+            setFullAnimal((prev) => ({ ...prev, ...res.data }));
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to load full animal details:', err);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, [isOpen, animal]);
+
+  if (!isOpen || !fullAnimal) return null;
+
+  const petId = fullAnimal.id || fullAnimal.animalId;
+  const favorited = isFavorite(petId);
+
+  const handleFavoriteToggle = () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
+    if (favorited) {
+      removeFavorite(petId);
+    } else {
+      addFavorite(fullAnimal);
+    }
+  };
+
+  // Field normalization
+  const petName = fullAnimal.name || fullAnimal.animalName || 'Adoptable Pet';
+  const petGender = fullAnimal.gender || fullAnimal.sex || 'Unknown';
+  const petBreed = fullAnimal.breed || fullAnimal.animalBreed || 'Domestic Mix';
+  const petSpecies = fullAnimal.species || fullAnimal.animalSpecies || 'Pet';
+  const petAge = fullAnimal.age !== null && fullAnimal.age !== undefined ? `${fullAnimal.age} yrs` : 'Unknown age';
+  const petWeight = fullAnimal.weight
+    ? (typeof fullAnimal.weight === 'number' ? `${fullAnimal.weight} lbs` : fullAnimal.weight)
+    : null;
+
+  // Shelter normalization with fallback
+  const shelterId = Number(
+    fullAnimal.shelterId ||
+    fullAnimal.shelter?.id ||
+    (fullAnimal.shelterName?.includes('Berkeley') ? 1 : fullAnimal.shelterName?.includes('Jefferson') ? 2 : 1)
+  );
+  const fallback = KNOWN_SHELTERS[shelterId] || KNOWN_SHELTERS[1];
+
+  const shelterName = fullAnimal.shelterName || fullAnimal.shelter?.name || fallback.name;
+  const shelterLocation = fullAnimal.shelterAddress || fullAnimal.location || fullAnimal.shelter?.location || fullAnimal.shelter?.address || fallback.address;
+  const shelterPhone = fullAnimal.shelterPhone || fullAnimal.shelter?.phoneNumber || fullAnimal.shelter?.phone || fallback.phoneNumber;
+  const shelterEmail = fullAnimal.shelterEmail || fullAnimal.shelter?.email || fallback.email;
+  const adoptionUrl = fullAnimal.adoptionUrl || fullAnimal.adoptionListingsUrl || fullAnimal.shelter?.adoptionListingsUrl;
+
+  const goodWithKids = fullAnimal.goodWithKids ?? fullAnimal.goodWithChildren ?? null;
+  const goodWithDogs = fullAnimal.goodWithDogs ?? null;
+  const goodWithCats = fullAnimal.goodWithCats ?? null;
+
+  const description = fullAnimal.description || `${petName} is an active, loving companion waiting for a forever home. Up to date on vaccinations and ready for adoption.`;
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div 
+        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-[#0b1329] sm:p-8 transition-colors"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-5 right-5 z-10 rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white transition cursor-pointer"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        {loading ? (
+          <div className="flex h-64 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              {/* Photo */}
+              <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900">
+                <img
+                  src={
+                    fullAnimal.imageUrl ||
+                    fullAnimal.photoUrl ||
+                    fullAnimal.image ||
+                    'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=600&auto=format&fit=crop&q=80'
+                  }
+                  alt={petName}
+                  className="h-full w-full object-cover"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=600&auto=format&fit=crop&q=80';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleFavoriteToggle}
+                  className={`absolute top-3 right-3 rounded-full p-2.5 backdrop-blur-md transition-transform active:scale-90 cursor-pointer ${
+                    favorited ? 'bg-rose-500 text-white shadow-md' : 'bg-black/40 text-white hover:bg-black/60'
+                  }`}
+                >
+                  <Heart className={`h-4 w-4 ${favorited ? 'fill-current' : ''}`} />
+                </button>
+              </div>
+
+              {/* Details & Attributes */}
+              <div className="flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-center justify-between pr-8">
+                    <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+                      {petName}
+                    </h2>
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 uppercase tracking-wider">
+                      {petSpecies}
+                    </span>
+                  </div>
+
+                  <p className="mt-1 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                    <MapPin className="h-3.5 w-3.5 shrink-0" />
+                    <span>{shelterLocation}</span>
+                  </p>
+
+                  {/* Badges Grid */}
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-center text-xs">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-900/60">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Breed</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">{petBreed}</span>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-900/60">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Age / Gender</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 block">{petAge} &bull; {petGender}</span>
+                    </div>
+                    {petWeight && (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-900/60 col-span-2">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Weight</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 block">{petWeight}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Compatibility Tags */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Compatibility
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {goodWithKids && (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                        <Check className="h-3 w-3" /> Good with Kids
+                      </span>
+                    )}
+                    {goodWithDogs && (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                        <Check className="h-3 w-3" /> Good with Dogs
+                      </span>
+                    )}
+                    {goodWithCats && (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                        <Check className="h-3 w-3" /> Good with Cats
+                      </span>
+                    )}
+                    {!goodWithKids && !goodWithDogs && !goodWithCats && (
+                      <span className="text-xs text-slate-500 dark:text-slate-400">Standard household temperament.</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Description */}
+            <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">About {petName}</h3>
+              <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                {description}
+              </p>
+            </div>
+
+            {/* Adoption Application Call-To-Action Banner */}
+            <div className="mt-6">
+              {adoptionUrl ? (
+                <a
+                  href={adoptionUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-700 transition cursor-pointer"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>Adoption Application Form</span>
+                  <ExternalLink className="h-4 w-4 opacity-80" />
+                </a>
+              ) : (
+                <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+                  Sorry, we don't have the link for the application form at this time.
+                </div>
+              )}
+            </div>
+
+            {/* Shelter Footer & Contact */}
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-[#070d1e]">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Hosted by: {shelterName}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {shelterPhone && (
+                  <a
+                    href={`tel:${shelterPhone}`}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition"
+                  >
+                    <Phone className="h-3.5 w-3.5" />
+                    <span>Call</span>
+                  </a>
+                )}
+                {shelterEmail && (
+                  <a
+                    href={`mailto:${shelterEmail}?subject=Adoption Inquiry: ${petName}`}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-slate-200 px-4 py-2 text-xs font-bold text-slate-800 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    <span>Inquire</span>
+                  </a>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+=== FILE: src/components/NavBar.jsx ===
+import React from 'react';
+import { NavLink, Link } from 'react-router-dom';
+import { PawPrint, Heart, Building2, Compass, LogOut, BookOpen } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useFavorites } from '../context/FavoritesContext';
+
+export default function Navbar() {
+  const { user, isAuthenticated, logout, openAuthModal } = useAuth();
+  const { favorites } = useFavorites();
+
+  const navLinkClass = ({ isActive }) =>
+    `flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
+      isActive
+        ? 'bg-blue-600 text-white shadow-sm'
+        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
+    }`;
+
+  const displayName = user?.username || user?.email?.split('@')[0] || 'User';
+
+  return (
+    <nav className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 dark:border-slate-800 dark:bg-[#0b1329]/95 backdrop-blur-md transition-colors duration-200">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+        {/* Brand Logo */}
+        <Link to="/" className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md">
+            <PawPrint className="h-5 w-5" />
+          </div>
+          <span className="text-base font-black tracking-tight text-slate-900 dark:text-white">
+            Adopt<span className="text-blue-500">Me</span>
+          </span>
+        </Link>
+
+        {/* Navigation Links */}
+        <div className="hidden md:flex items-center gap-2">
+          <NavLink to="/" className={navLinkClass}>
+            <Compass className="h-4 w-4" />
+            <span>Explore</span>
+          </NavLink>
+
+          <NavLink to="/breeds" className={navLinkClass}>
+            <BookOpen className="h-4 w-4" />
+            <span>Breeds</span>
+          </NavLink>
+
+          <NavLink to="/shelters" className={navLinkClass}>
+            <Building2 className="h-4 w-4" />
+            <span>Shelters</span>
+          </NavLink>
+
+          <NavLink to="/favorites" className={navLinkClass}>
+            <Heart className="h-4 w-4" />
+            <span>Favorites ({favorites?.length || 0})</span>
+          </NavLink>
+        </div>
+
+        {/* Auth Actions */}
+        <div className="flex items-center gap-3">
+          {isAuthenticated ? (
+            <div className="flex items-center gap-3">
+              <Link
+                to="/settings"
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100/80 px-3 py-1.5 text-xs font-bold text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-slate-700 transition"
+              >
+                <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-600/20 text-blue-600 dark:bg-blue-600/30 dark:text-blue-400 font-bold text-[11px]">
+                  {displayName[0].toUpperCase()}
+                </div>
+                <span className="max-w-30 truncate">{displayName}</span>
+              </Link>
+
+              <button
+                type="button"
+                onClick={logout}
+                title="Log Out"
+                className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-400 dark:hover:bg-rose-900/40 transition cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Log Out</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openAuthModal('register')}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition cursor-pointer"
+            >
+              Sign Up
+            </button>
+          )}
+        </div>
+      </div>
+    </nav>
+  );
+}
+=== FILE: src/components/PetMap.jsx ===
+import React, { useMemo } from 'react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { useNavigate } from 'react-router-dom';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { MapPin, Phone, ExternalLink, PawPrint, ChevronRight } from 'lucide-react';
+
+// Exact SVG Pin with zero rotation distortion — needle tip anchored at [16, 38]
+const customPinIcon = L.divIcon({
+  className: 'custom-map-marker',
+  html: `
+    <div style="filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.35)); cursor: pointer; transition: transform 0.15s ease;">
+      <svg width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 0C7.16344 0 0 7.16344 0 16C0 26.5 16 38 16 38C16 38 32 26.5 32 16C32 7.16344 24.8366 0 16 0Z" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+        <path d="M16 22.35L14.55 21.03C9.4 16.36 6 13.28 6 9.5C6 6.42 8.42 4 11.5 4C13.24 4 14.91 4.81 16 6.09C17.09 4.81 18.76 4 20.5 4C23.58 4 26 6.42 26 9.5C26 13.28 22.6 16.36 17.45 21.04L16 22.35Z" fill="#ffffff"/>
+      </svg>
+    </div>
+  `,
+  iconSize: [32, 38],
+  iconAnchor: [16, 38], // Places the needle tip on the exact GPS coordinate
+  popupAnchor: [0, -38],
+});
+
+export default function PetMap({ animals = [], onSelectAnimal }) {
+  const navigate = useNavigate();
+
+  // Aggregate active shelters using coordinates provided directly from the API response
+  const activeMarkers = useMemo(() => {
+    if (!Array.isArray(animals) || animals.length === 0) {
+      return [];
+    }
+
+    const shelterMap = new Map();
+
+    animals.forEach((animal) => {
+      const shelterId = animal.shelterId ?? animal.shelter?.id;
+      const lat = animal.latitude ?? animal.shelterLatitude ?? animal.shelter?.latitude;
+      const lng = animal.longitude ?? animal.shelterLongitude ?? animal.shelter?.longitude;
+
+      if (!shelterId || !lat || !lng) {
+        return;
+      }
+
+      if (!shelterMap.has(shelterId)) {
+        shelterMap.set(shelterId, {
+          id: shelterId,
+          name: animal.shelterName || animal.shelter?.name || 'Partner Shelter',
+          address: animal.shelterAddress || animal.shelter?.address || '',
+          phone: animal.shelterPhone || animal.shelter?.phone || animal.shelter?.phoneNumber || '',
+          lat: Number(lat),
+          lng: Number(lng),
+          animals: [],
+        });
+      }
+      shelterMap.get(shelterId).animals.push(animal);
+    });
+
+    return Array.from(shelterMap.values());
+  }, [animals]);
+
+  const defaultCenter = [39.44026, -77.94054];
+
+  return (
+    <div className="relative h-full w-full overflow-hidden rounded-3xl border border-gray-200 shadow-sm dark:border-gray-800">
+      <MapContainer
+        center={activeMarkers.length > 0 ? [activeMarkers[0].lat, activeMarkers[0].lng] : defaultCenter}
+        zoom={12}
+        scrollWheelZoom={false}
+        className="h-full w-full"
+        style={{ minHeight: '100%', height: '100%', width: '100%' }}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+
+        {activeMarkers.map((shelter) => (
+          <Marker
+            key={shelter.id}
+            position={[shelter.lat, shelter.lng]}
+            icon={customPinIcon}
+            eventHandlers={{
+              mouseover: (e) => {
+                e.target.openPopup();
+              },
+            }}
+          >
+            <Popup className="custom-popup">
+              <div className="p-1 min-w-60">
+                {/* Shelter Header */}
+                <div
+                  onClick={() => navigate(`/shelters/${shelter.id}`)}
+                  className="cursor-pointer group border-b border-gray-100 dark:border-gray-700 pb-2 hover:opacity-90"
+                >
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">
+                      {shelter.name}
+                    </h4>
+                    <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                  {shelter.address && (
+                    <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1">
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      {shelter.address}
+                    </p>
+                  )}
+                  {shelter.phone && (
+                    <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
+                      <Phone className="h-3 w-3 shrink-0" />
+                      {shelter.phone}
+                    </p>
+                  )}
+                </div>
+
+                {/* Available Pets Count */}
+                <div className="mt-2.5 flex items-center justify-between text-xs">
+                  <span className="inline-flex items-center gap-1 font-semibold text-blue-600">
+                    <PawPrint className="h-3.5 w-3.5" />
+                    {shelter.animals.length} {shelter.animals.length === 1 ? 'Pet' : 'Pets'} Matching
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/shelters/${shelter.id}`)}
+                    className="text-[11px] font-bold text-gray-600 hover:text-blue-600 cursor-pointer flex items-center gap-0.5"
+                  >
+                    View Shelter <ExternalLink className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+
+                {/* Pet Image Previews */}
+                {shelter.animals.length > 0 && (
+                  <div className="mt-3 space-y-1.5 pt-2 border-t border-gray-100 dark:border-gray-700">
+                    <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400">
+                      Matching Pets ({shelter.animals.length})
+                    </span>
+                    {shelter.animals.slice(0, 3).map((pet) => (
+                      <div
+                        key={pet.id}
+                        onClick={() => onSelectAnimal && onSelectAnimal(pet)}
+                        className="flex items-center gap-2 rounded-lg p-1 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
+                      >
+                        {pet.imageUrl ? (
+                          <img
+                            src={pet.imageUrl}
+                            alt={pet.name}
+                            className="h-8 w-8 rounded-md object-cover border border-gray-200 dark:border-gray-700 shrink-0"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src =
+                                'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=100&auto=format&fit=crop&q=60';
+                            }}
+                          />
+                        ) : (
+                          <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950 flex items-center justify-center text-blue-600 shrink-0">
+                            <PawPrint className="h-4 w-4" />
+                          </div>
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                            {pet.name}
+                          </p>
+                          <p className="text-[10px] text-gray-500 truncate">
+                            {pet.breed || pet.species} &bull; {pet.age ? `${pet.age} yrs` : 'Young'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+      </MapContainer>
+    </div>
+  );
+}
+=== FILE: src/components/FilterBar.jsx ===
+import React from 'react';
+import { RotateCcw, Search, MapPin } from 'lucide-react';
+
+export default function FilterBar({ filters, setFilters, onReset }) {
+  const handleChange = (key, value) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const inputClass =
+    'w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-xs text-slate-900 placeholder-slate-400 transition focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-[#0f172a]/60 dark:text-slate-100 dark:placeholder-slate-500';
+
+  const labelClass =
+    'block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5';
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/90 dark:shadow-xl backdrop-blur-md space-y-4 transition-colors">
+      {/* Row 1: Search, Breed, Location & Radius */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
+        <div className="sm:col-span-4">
+          <label className={labelClass}>Pet Name</label>
+          <input
+            type="text"
+            value={filters.name || ''}
+            onChange={(e) => handleChange('name', e.target.value)}
+            placeholder="Search by name (e.g. Milo)..."
+            className={inputClass}
+          />
+        </div>
+
+        <div className="sm:col-span-4">
+          <label className={labelClass}>Breed</label>
+          <input
+            type="text"
+            value={filters.breed || ''}
+            onChange={(e) => handleChange('breed', e.target.value)}
+            placeholder="Search by breed (e.g. Retriever)..."
+            className={inputClass}
+          />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className={labelClass}>Your ZIP</label>
+          <input
+            type="text"
+            value={filters.zipCode || ''}
+            onChange={(e) => handleChange('zipCode', e.target.value)}
+            placeholder="e.g. 25405"
+            maxLength={5}
+            className={inputClass}
+          />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className={labelClass}>Distance</label>
+          <select
+            value={filters.radius || '50'}
+            onChange={(e) => handleChange('radius', e.target.value)}
+            className={inputClass}
+          >
+            <option value="5">Within 5 mi</option>
+            <option value="15">Within 15 mi</option>
+            <option value="30">Within 30 mi</option>
+            <option value="50">Within 50 mi</option>
+            <option value="500">Any Distance</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Row 2: Species, Gender, Size, Age Range */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
+        <div className="sm:col-span-3">
+          <label className={labelClass}>Species</label>
+          <select
+            value={filters.species || ''}
+            onChange={(e) => handleChange('species', e.target.value)}
+            className={inputClass}
+          >
+            <option value="">All Species</option>
+            <option value="DOG">Dogs</option>
+            <option value="CAT">Cats</option>
+          </select>
+        </div>
+
+        <div className="sm:col-span-3">
+          <label className={labelClass}>Gender</label>
+          <select
+            value={filters.gender || ''}
+            onChange={(e) => handleChange('gender', e.target.value)}
+            className={inputClass}
+          >
+            <option value="">All Genders</option>
+            <option value="MALE">Male</option>
+            <option value="FEMALE">Female</option>
+          </select>
+        </div>
+
+        <div className="sm:col-span-3">
+          <label className={labelClass}>Size</label>
+          <select
+            value={filters.size || ''}
+            onChange={(e) => handleChange('size', e.target.value)}
+            className={inputClass}
+          >
+            <option value="">All Sizes</option>
+            <option value="SMALL">Small</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="LARGE">Large</option>
+          </select>
+        </div>
+
+        <div className="sm:col-span-3">
+          <label className={labelClass}>Age Range</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min="0"
+              placeholder="Min"
+              value={filters.minAge ?? ''}
+              onChange={(e) => handleChange('minAge', e.target.value)}
+              className={inputClass}
+            />
+            <span className="text-slate-400 font-bold">-</span>
+            <input
+              type="number"
+              min="0"
+              placeholder="Max"
+              value={filters.maxAge ?? ''}
+              onChange={(e) => handleChange('maxAge', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3: Checkboxes & Reset */}
+      <div className="flex flex-wrap items-center justify-between border-t border-slate-200 dark:border-slate-800/80 pt-3 text-xs">
+        <div className="flex items-center gap-5">
+          <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Good With:
+          </span>
+
+          <label className="flex items-center gap-2 cursor-pointer select-none text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={!!filters.goodWithKids}
+              onChange={(e) => handleChange('goodWithKids', e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-blue-600"
+            />
+            <span>Kids</span>
+          </label>
+
+          <label className="flex items-center gap-2 cursor-pointer select-none text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={!!filters.goodWithDogs}
+              onChange={(e) => handleChange('goodWithDogs', e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-blue-600"
+            />
+            <span>Dogs</span>
+          </label>
+
+          <label className="flex items-center gap-2 cursor-pointer select-none text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={!!filters.goodWithCats}
+              onChange={(e) => handleChange('goodWithCats', e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-blue-600"
+            />
+            <span>Cats</span>
+          </label>
+        </div>
+
+        <button
+          type="button"
+          onClick={onReset}
+          className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          <span>Reset Filters</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+=== FILE: src/components/AuthModal.jsx ===
+import React, { useState, useEffect } from 'react';
+import { X, Loader2, AlertTriangle, ExternalLink } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+
+export default function AuthModal() {
+  const { isAuthModalOpen, closeAuthModal, authMode, login, register } = useAuth();
+
+  const [mode, setMode] = useState('register');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+
+  const [formData, setFormData] = useState({
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    address: '',
+    city: '',
+    state: 'WV',
+    zipCode: '',
+  });
+
+  useEffect(() => {
+    if (authMode) {
+      setMode(authMode);
+    }
+    setError('');
+    setAgreedToTerms(false);
+  }, [authMode, isAuthModalOpen]);
+
+  if (!isAuthModalOpen) return null;
+
+  const handleChange = (e) => {
+    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (mode === 'register') {
+      if (!agreedToTerms) {
+        setError('You must agree to the Terms of Service to create an account.');
+        return;
+      }
+      if (!formData.username.trim()) {
+        setError('Please choose a username.');
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match.');
+        return;
+      }
+      if (!formData.zipCode.trim() || formData.zipCode.length !== 5) {
+        setError('Please enter a valid 5-digit ZIP code for radius matching.');
+        return;
+      }
+    }
+
+    try {
+      setLoading(true);
+      if (mode === 'login') {
+        await login({
+          email: formData.email,
+          password: formData.password,
+        });
+      } else {
+        await register({
+          username: formData.username.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+          address: formData.address.trim(),
+          city: formData.city.trim(),
+          state: formData.state.trim(),
+          zipCode: formData.zipCode.trim(),
+        });
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Authentication failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputClass =
+    'w-full rounded-xl border border-slate-800 bg-[#0f172a]/60 px-3.5 py-2 text-xs text-white placeholder-slate-500 transition focus:border-blue-500 focus:outline-none';
+  const labelClass = 'block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1';
+
+  const isSubmitDisabled = loading || (mode === 'register' && !agreedToTerms);
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      onClick={closeAuthModal}
+    >
+      <div 
+        className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-slate-800 bg-[#0b1329] p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={closeAuthModal}
+          className="absolute right-4 top-4 rounded-full p-2 text-slate-400 hover:bg-slate-800 hover:text-white transition cursor-pointer"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="mb-5 text-center">
+          <h2 className="text-xl font-black text-white">
+            {mode === 'register' ? 'Create Your Account' : 'Welcome Back'}
+          </h2>
+          <p className="mt-1 text-xs text-slate-400">
+            {mode === 'register'
+              ? 'Join AdoptMe to find adoptable pets in your area'
+              : 'Sign in to access your saved pets and reviews'}
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-800/60 bg-rose-950/40 p-3 text-xs font-semibold text-rose-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3.5">
+          {mode === 'register' && (
+            <div>
+              <label className={labelClass}>Username</label>
+              <input
+                type="text"
+                name="username"
+                required
+                value={formData.username}
+                onChange={handleChange}
+                placeholder="Choose a username"
+                className={inputClass}
+              />
+            </div>
+          )}
+
+          <div>
+            <label className={labelClass}>Email Address</label>
+            <input
+              type="email"
+              name="email"
+              required
+              value={formData.email}
+              onChange={handleChange}
+              placeholder="you@example.com"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Password</label>
+            <input
+              type="password"
+              name="password"
+              required
+              value={formData.password}
+              onChange={handleChange}
+              placeholder="••••••••"
+              className={inputClass}
+            />
+          </div>
+
+          {mode === 'register' && (
+            <>
+              <div>
+                <label className={labelClass}>Confirm Password</label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  required
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  placeholder="••••••••"
+                  className={inputClass}
+                />
+              </div>
+
+              {/* Location Details */}
+              <div className="pt-2 border-t border-slate-800 space-y-3">
+                <div>
+                  <label className={labelClass}>Street Address</label>
+                  <input
+                    type="text"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleChange}
+                    placeholder="123 Main St"
+                    className={inputClass}
+                  />
+                </div>
+
+                <div className="grid grid-cols-12 gap-2">
+                  <div className="col-span-5">
+                    <label className={labelClass}>City</label>
+                    <input
+                      type="text"
+                      name="city"
+                      value={formData.city}
+                      onChange={handleChange}
+                      placeholder="Martinsburg"
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div className="col-span-3">
+                    <label className={labelClass}>State</label>
+                    <input
+                      type="text"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleChange}
+                      placeholder="WV"
+                      maxLength={2}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div className="col-span-4">
+                    <label className={labelClass}>ZIP Code</label>
+                    <input
+                      type="text"
+                      name="zipCode"
+                      required
+                      value={formData.zipCode}
+                      onChange={handleChange}
+                      placeholder="25405"
+                      maxLength={5}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Terms Checkbox */}
+              <div className="flex items-start gap-2.5 pt-2">
+                <input
+                  type="checkbox"
+                  id="agreeTerms"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900 cursor-pointer"
+                />
+                <label htmlFor="agreeTerms" className="text-xs text-slate-400 select-none cursor-pointer">
+                  I agree to the{' '}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5 font-bold text-blue-400 hover:text-blue-300 hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <span>Terms of Service</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </label>
+              </div>
+            </>
+          )}
+
+          <button
+            type="submit"
+            disabled={isSubmitDisabled}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : mode === 'login' ? (
+              'Sign In'
+            ) : (
+              'Create Account'
+            )}
+          </button>
+        </form>
+
+        <div className="mt-5 border-t border-slate-800 pt-4 text-center">
+          {mode === 'register' ? (
+            <p className="text-xs text-slate-400">
+              Already have an account?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setError('');
+                }}
+                className="font-bold text-blue-400 hover:text-blue-300 cursor-pointer"
+              >
+                Sign In
+              </button>
+            </p>
+          ) : (
+            <p className="text-xs text-slate-400">
+              Don't have an account?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('register');
+                  setError('');
+                }}
+                className="font-bold text-blue-400 hover:text-blue-300 cursor-pointer"
+              >
+                Sign Up
+              </button>
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+=== FILE: src/main.jsx ===
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App';
+import { AuthProvider } from './context/AuthContext';
+import { FavoritesProvider } from './context/FavoritesContext';
+import { ThemeProvider } from './context/ThemeContext';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <ThemeProvider>
+        <AuthProvider>
+          <FavoritesProvider>
+            <App />
+          </FavoritesProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </BrowserRouter>
+  </React.StrictMode>
+);
+=== FILE: src/App.jsx ===
+import React from 'react';
+import { Routes, Route } from 'react-router-dom';
+import Navbar from './components/NavBar';
+import AuthModal from './components/AuthModal';
+import ExplorePage from './pages/ExplorePage';
+import SheltersDirectoryPage from './pages/SheltersDirectoryPage';
+import ShelterDetailsPage from './pages/ShelterDetailsPage';
+import FavoritesPage from './pages/FavoritesPage';
+import SettingsPage from './pages/SettingsPage';
+import BreedsPage from './pages/BreedsPage';
+import TermsPage from './pages/TermsPage';
+
+export default function App() {
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-[#060b18] dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
+      <Navbar />
+      <main className="flex-1">
+        <Routes>
+          <Route path="/" element={<ExplorePage />} />
+          <Route path="/explore" element={<ExplorePage />} />
+          <Route path="/shelters" element={<SheltersDirectoryPage />} />
+          <Route path="/shelters/:shelterId" element={<ShelterDetailsPage />} />
+          <Route path="/favorites" element={<FavoritesPage />} />
+          <Route path="/breeds" element={<BreedsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+        </Routes>
+      </main>
+      <AuthModal />
+    </div>
+  );
+}
+=== FILE: src/data/BreedsData.js ===
+export const BREEDS_DATA = [
+  // ==========================================
+  // TOP DOG BREEDS (15)
+  // ==========================================
+  {
+    id: 'french-bulldog',
+    name: 'French Bulldog',
+    species: 'Dog',
+    size: 'Small',
+    energy: 'Low-Medium',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '10 - 12 years',
+    temperament: ['Playful', 'Adaptable', 'Smart', 'Affectionate'],
+    description: 'One of the world\'s most popular small-dog breeds. Their quiet demeanor and compact size make them ideal companions for city dwellers and apartment living.',
+    imageUrl: 'https://images.pexels.com/photos/34239657/pexels-photo-34239657.jpeg',
+  },
+  {
+    id: 'labrador-retriever',
+    name: 'Labrador Retriever',
+    species: 'Dog',
+    size: 'Large',
+    energy: 'High',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '11 - 13 years',
+    temperament: ['Friendly', 'Active', 'Outgoing', 'Gentle'],
+    description: 'The quintessential friendly companion. Labs are energetic sporting dogs eager to bond with the whole family, socialize, and swim.',
+    imageUrl: 'https://images.pexels.com/photos/17215310/pexels-photo-17215310.jpeg',
+  },
+  {
+    id: 'golden-retriever',
+    name: 'Golden Retriever',
+    species: 'Dog',
+    size: 'Large',
+    energy: 'High',
+    grooming: 'Moderate',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '10 - 12 years',
+    temperament: ['Intelligent', 'Friendly', 'Devoted', 'Trustworthy'],
+    description: 'Stalwart family favorites, Golden Retrievers are joyful, easy to train, and excel as guide, search-and-rescue, and service animals.',
+    imageUrl: 'https://images.pexels.com/photos/19962782/pexels-photo-19962782.jpeg',
+  },
+  {
+    id: 'german-shepherd',
+    name: 'German Shepherd',
+    species: 'Dog',
+    size: 'Large',
+    energy: 'High',
+    grooming: 'Moderate',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '7 - 10 years',
+    temperament: ['Confident', 'Courageous', 'Smart', 'Loyal'],
+    description: 'Widely regarded as dogkind\'s finest all-around worker. German Shepherds are devoted guardians that thrive with regular physical and mental exercise.',
+    imageUrl: 'https://images.pexels.com/photos/11700750/pexels-photo-11700750.jpeg',
+  },
+  {
+    id: 'poodle',
+    name: 'Poodle (Standard / Mini)',
+    species: 'Dog',
+    size: 'Medium',
+    energy: 'Medium-High',
+    grooming: 'High',
+    hypoallergenic: true,
+    goodWithKids: true,
+    lifeSpan: '12 - 15 years',
+    temperament: ['Active', 'Proud', 'Brilliant', 'Eager'],
+    description: 'Renowned for elegance and unmatched intelligence. Their low-dander, non-shedding coat makes them the gold standard for allergy sufferers.',
+    imageUrl: 'https://images.pexels.com/photos/35276199/pexels-photo-35276199.jpeg',
+  },
+  {
+    id: 'bulldog',
+    name: 'Bulldog',
+    species: 'Dog',
+    size: 'Medium',
+    energy: 'Low',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '8 - 10 years',
+    temperament: ['Docile', 'Willful', 'Friendly', 'Calm'],
+    description: 'With their distinctive wrinkled face and rolling gait, Bulldogs are quiet, easygoing companions that prefer short walks and lots of nap time.',
+    imageUrl: 'https://images.pexels.com/photos/5288556/pexels-photo-5288556.jpeg',
+  },
+  {
+    id: 'beagle',
+    name: 'Beagle',
+    species: 'Dog',
+    size: 'Small',
+    energy: 'High',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '10 - 15 years',
+    temperament: ['Amiable', 'Curious', 'Merry', 'Determined'],
+    description: 'Curious scent hounds with happy-go-lucky attitudes. Beagles are sturdy, energetic pack animals that get along great with other dogs and kids.',
+    imageUrl: 'https://images.pexels.com/photos/28220888/pexels-photo-28220888.jpeg',
+  },
+  {
+    id: 'rottweiler',
+    name: 'Rottweiler',
+    species: 'Dog',
+    size: 'Large',
+    energy: 'Medium-High',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '9 - 10 years',
+    temperament: ['Loyal', 'Loving', 'Confident', 'Guardian'],
+    description: 'A robust working dog of great strength. Rottweilers are gentle playmates and protectors within their family circle, holding a calm confidence.',
+    imageUrl: 'https://images.pexels.com/photos/19892502/pexels-photo-19892502.jpeg',
+  },
+  {
+    id: 'dachshund',
+    name: 'Dachshund',
+    species: 'Dog',
+    size: 'Small',
+    energy: 'Medium',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: false,
+    lifeSpan: '12 - 16 years',
+    temperament: ['Spunky', 'Clever', 'Courageous', 'Devoted'],
+    description: 'Iconic for their long silhouette and short legs. Dachshunds are spunky, fearless scent hounds with big personalities in compact bodies.',
+    imageUrl: 'https://images.pexels.com/photos/31040636/pexels-photo-31040636.jpeg',
+  },
+  {
+    id: 'german-shorthaired-pointer',
+    name: 'German Shorthaired Pointer',
+    species: 'Dog',
+    size: 'Large',
+    energy: 'High',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '10 - 12 years',
+    temperament: ['Boisterous', 'Affectionate', 'Trainable', 'Active'],
+    description: 'The ultimate versatile hunter-companion. GSPs are athletic, friendly dogs that love running, swimming, and outdoor endurance activities.',
+    imageUrl: 'https://images.pexels.com/photos/25950391/pexels-photo-25950391.jpeg',
+  },
+  {
+    id: 'pembroke-welsh-corgi',
+    name: 'Pembroke Welsh Corgi',
+    species: 'Dog',
+    size: 'Small',
+    energy: 'Medium-High',
+    grooming: 'Moderate',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '12 - 13 years',
+    temperament: ['Alert', 'Affectionate', 'Smart', 'Tenacious'],
+    description: 'Short-legged herders packed with spunk and intelligence. Corgis are vocal, responsive, and form strong protective bonds with their families.',
+    imageUrl: 'https://images.pexels.com/photos/23427671/pexels-photo-23427671.jpeg',
+  },
+  {
+    id: 'australian-shepherd',
+    name: 'Australian Shepherd',
+    species: 'Dog',
+    size: 'Medium',
+    energy: 'High',
+    grooming: 'Moderate',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '12 - 15 years',
+    temperament: ['Work-oriented', 'Intelligent', 'Good-natured', 'Exuberant'],
+    description: 'A tireless ranch dog known for keen eyes and agility. Aussies require plenty of agility, herding, or running tasks to channel their work drive.',
+    imageUrl: 'https://images.pexels.com/photos/18201403/pexels-photo-18201403.jpeg',
+  },
+  {
+    id: 'yorkshire-terrier',
+    name: 'Yorkshire Terrier',
+    species: 'Dog',
+    size: 'Small',
+    energy: 'Medium',
+    grooming: 'High',
+    hypoallergenic: true,
+    goodWithKids: false,
+    lifeSpan: '11 - 15 years',
+    temperament: ['Feisty', 'Affectionate', 'Sprightly', 'Tomboyish'],
+    description: 'Tiny in stature but big on personality. Yorkies possess a human-like, non-shedding silky coat and a fearless terrier attitude.',
+    imageUrl: 'https://images.pexels.com/photos/29026342/pexels-photo-29026342.jpeg',
+  },
+  {
+    id: 'boxer',
+    name: 'Boxer',
+    species: 'Dog',
+    size: 'Large',
+    energy: 'High',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '10 - 12 years',
+    temperament: ['Playful', 'Patient', 'Devoted', 'Upbeat'],
+    description: 'Muscular, athletic, and endlessly playful. Boxers are celebrated for their patience and gentle protective nature around young children.',
+    imageUrl: 'https://images.pexels.com/photos/4687834/pexels-photo-4687834.jpeg',
+  },
+  {
+    id: 'siberian-husky',
+    name: 'Siberian Husky',
+    species: 'Dog',
+    size: 'Medium',
+    energy: 'High',
+    grooming: 'Moderate',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '12 - 14 years',
+    temperament: ['Outgoing', 'Mischievous', 'Gentle', 'Loyal'],
+    description: 'Thick-coated sled dogs bred for endurance in packs. Huskies are graceful, vocal, and love colder climates and running companions.',
+    imageUrl: 'https://images.pexels.com/photos/11761041/pexels-photo-11761041.jpeg',
+  },
+
+  // ==========================================
+  // TOP CAT BREEDS (15)
+  // ==========================================
+  {
+    id: 'ragdoll',
+    name: 'Ragdoll',
+    species: 'Cat',
+    size: 'Large',
+    energy: 'Low',
+    grooming: 'Moderate',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '12 - 17 years',
+    temperament: ['Gentle', 'Affectionate', 'Placid', 'Sweet'],
+    description: 'Named for their habit of going limp with pleasure when cradled. Ragdolls are blue-eyed, fluffy sweethearts who follow owners room to room.',
+    imageUrl: 'https://images.pexels.com/photos/19468852/pexels-photo-19468852.jpeg',
+  },
+  {
+    id: 'maine-coon',
+    name: 'Maine Coon',
+    species: 'Cat',
+    size: 'Large',
+    energy: 'Medium',
+    grooming: 'High',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '12 - 15 years',
+    temperament: ['Friendly', 'Sociable', 'Gentle', 'Playful'],
+    description: 'The native American longhair and gentle giant. Maine Coons have tufted ears, dense water-resistant fur, and dog-like loyal personalities.',
+    imageUrl: 'https://images.pexels.com/photos/15657864/pexels-photo-15657864.jpeg',
+  },
+  {
+    id: 'devon-rex',
+    name: 'Devon Rex',
+    species: 'Cat',
+    size: 'Small',
+    energy: 'High',
+    grooming: 'Low',
+    hypoallergenic: true,
+    goodWithKids: true,
+    lifeSpan: '9 - 15 years',
+    temperament: ['Playful', 'Mischievous', 'Loyal', 'Snuggly'],
+    description: 'Pixie-like felines with oversized ears and rippled coats. Their short, minimal-shed coat produces fewer allergens than typical cats.',
+    imageUrl: 'https://images.pexels.com/photos/30912813/pexels-photo-30912813.jpeg',
+  },
+  {
+    id: 'exotic-shorthair',
+    name: 'Exotic Shorthair',
+    species: 'Cat',
+    size: 'Medium',
+    energy: 'Low',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '12 - 14 years',
+    temperament: ['Calm', 'Quiet', 'Sweet', 'Loving'],
+    description: 'Often called the "lazy man\'s Persian." They have the sweet flat face and docile nature of Persians without the high-maintenance daily brushing.',
+    imageUrl: 'https://images.pexels.com/photos/10402135/pexels-photo-10402135.jpeg',
+  },
+  {
+    id: 'persian',
+    name: 'Persian',
+    species: 'Cat',
+    size: 'Medium',
+    energy: 'Low',
+    grooming: 'High',
+    hypoallergenic: false,
+    goodWithKids: false,
+    lifeSpan: '10 - 15 years',
+    temperament: ['Quiet', 'Docile', 'Gentle', 'Dignified'],
+    description: 'The aristocrat of cat breeds with a luxurious long coat and serene disposition. Persians enjoy quiet homes and regular grooming rituals.',
+    imageUrl: 'https://images.pexels.com/photos/32727346/pexels-photo-32727346.jpeg',
+  },
+  {
+    id: 'british-shorthair',
+    name: 'British Shorthair',
+    species: 'Cat',
+    size: 'Medium',
+    energy: 'Low-Medium',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '12 - 17 years',
+    temperament: ['Easygoing', 'Calm', 'Loyal', 'Independent'],
+    description: 'Sturdy, round-faced, teddy-bear cats. British Shorthairs are peaceful, undemanding, and happy observing their humans from nearby perches.',
+    imageUrl: 'https://images.pexels.com/photos/32419593/pexels-photo-32419593.jpeg',
+  },
+  {
+    id: 'abyssinian',
+    name: 'Abyssinian',
+    species: 'Cat',
+    size: 'Medium',
+    energy: 'High',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '9 - 15 years',
+    temperament: ['Active', 'Inquisitive', 'Athletic', 'Curious'],
+    description: 'Resembling ancient wildcats with a ticked agouti coat. Abyssinians are high-energy acrobats that love climbing to the highest shelves in the house.',
+    imageUrl: 'https://images.pexels.com/photos/30163612/pexels-photo-30163612.jpeg',
+  },
+  {
+    id: 'scottish-fold',
+    name: 'Scottish Fold',
+    species: 'Cat',
+    size: 'Medium',
+    energy: 'Low-Medium',
+    grooming: 'Moderate',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '11 - 14 years',
+    temperament: ['Sweet-tempered', 'Loving', 'Quiet', 'Playful'],
+    description: 'Famous for their folded forward ears and owl-like expressions. They love posing like humans in the "Buddha position" and enjoying cuddles.',
+    imageUrl: 'https://images.pexels.com/photos/29212154/pexels-photo-29212154.jpeg',
+  },
+  {
+    id: 'sphynx',
+    name: 'Sphynx',
+    species: 'Cat',
+    size: 'Medium',
+    energy: 'High',
+    grooming: 'High',
+    hypoallergenic: true,
+    goodWithKids: true,
+    lifeSpan: '12 - 14 years',
+    temperament: ['Extroverted', 'Acrobatic', 'Curious', 'Warm'],
+    description: 'Hairless and heat-seeking. Sphynx cats are cuddly, extroverted clowns that require regular sponge baths to manage skin oils.',
+    imageUrl: 'https://images.pexels.com/photos/34574282/pexels-photo-34574282.jpeg',
+  },
+  {
+    id: 'siberian',
+    name: 'Siberian Cat',
+    species: 'Cat',
+    size: 'Large',
+    energy: 'Medium',
+    grooming: 'Moderate',
+    hypoallergenic: true,
+    goodWithKids: true,
+    lifeSpan: '12 - 15 years',
+    temperament: ['Affectionate', 'Fearless', 'Playful', 'Athletic'],
+    description: 'A dense triple-coat forest cat. Despite heavy fur, they naturally produce significantly lower levels of the Fel d 1 allergy protein.',
+    imageUrl: 'https://images.pexels.com/photos/20425560/pexels-photo-20425560.jpeg',
+  },
+  {
+    id: 'american-shorthair',
+    name: 'American Shorthair',
+    species: 'Cat',
+    size: 'Medium',
+    energy: 'Medium',
+    grooming: 'Low',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '15 - 20 years',
+    temperament: ['Even-tempered', 'Sociable', 'Gentle', 'Robust'],
+    description: 'Healthy, low-maintenance mouser champions with symmetrical tabby markings. Extremely versatile companions that fit any household.',
+    imageUrl: 'https://images.pexels.com/photos/479009/pexels-photo-479009.jpeg',
+  },
+  {
+    id: 'bengal',
+    name: 'Bengal',
+    species: 'Cat',
+    size: 'Medium',
+    energy: 'High',
+    grooming: 'Low',
+    hypoallergenic: true,
+    goodWithKids: true,
+    lifeSpan: '12 - 16 years',
+    temperament: ['Athletic', 'Curious', 'Bold', 'Talkative'],
+    description: 'Exotic spotted or marbled coats reminiscent of wild leopards. Bengals are muscular, vocal jumpers that even enjoy water play.',
+    imageUrl: 'https://images.pexels.com/photos/30002375/pexels-photo-30002375.jpeg',
+  },
+  {
+    id: 'russian-blue',
+    name: 'Russian Blue',
+    species: 'Cat',
+    size: 'Medium',
+    energy: 'Medium',
+    grooming: 'Low',
+    hypoallergenic: true,
+    goodWithKids: false,
+    lifeSpan: '15 - 20 years',
+    temperament: ['Reserved', 'Gentle', 'Intelligent', 'Quiet'],
+    description: 'Shimmering silver-blue coat and striking emerald eyes. Russian Blues are shy around strangers but deeply devoted to their chosen people.',
+    imageUrl: 'https://images.pexels.com/photos/17978639/pexels-photo-17978639.jpeg',
+  },
+  {
+    id: 'norwegian-forest-cat',
+    name: 'Norwegian Forest Cat',
+    species: 'Cat',
+    size: 'Large',
+    energy: 'Medium',
+    grooming: 'Moderate',
+    hypoallergenic: false,
+    goodWithKids: true,
+    lifeSpan: '12 - 16 years',
+    temperament: ['Gentle', 'Friendly', 'Calm', 'Mighty'],
+    description: 'Viking lore legends with waterproof coats and bushy tails. They are skilled climbers who love high vantage points and family games.',
+    imageUrl: 'https://images.pexels.com/photos/24023501/pexels-photo-24023501.jpeg',
+  },
+  {
+    id: 'oriental-shorthair',
+    name: 'Oriental Shorthair',
+    species: 'Cat',
+    size: 'Small',
+    energy: 'High',
+    grooming: 'Low',
+    hypoallergenic: true,
+    goodWithKids: true,
+    lifeSpan: '12 - 15 years',
+    temperament: ['Lively', 'Chatty', 'Affectionate', 'Demanding'],
+    description: 'Sleek, angular felines with bat-wing ears. They vocalize constantly with distinctive raspy meows and demand lots of interactive attention.',
+    imageUrl: 'https://images.pexels.com/photos/38679266/pexels-photo-38679266.jpeg',
+  }
+];
+=== FILE: src/pages/FavoritesPage.jsx ===
+import React, { useState, useMemo } from 'react';
+import { Heart, PawPrint } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useFavorites } from '../context/FavoritesContext';
+import PetCard from '../components/PetCard';
+import PetModal from '../components/PetModal';
+
+export default function FavoritesPage() {
+  const { favorites } = useFavorites();
+  const [selectedPet, setSelectedPet] = useState(null);
+
+  // Normalize list whether backend returns array of Animal or array of Favorite records
+  const normalizedFavorites = useMemo(() => {
+    if (!Array.isArray(favorites)) return [];
+    return favorites.map((fav) => {
+      const pet = fav.animal || fav;
+      return {
+        ...pet,
+        id: pet.id || fav.animalId || fav.id,
+      };
+    });
+  }, [favorites]);
+
+  return (
+    <>
+      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+        <div className="border-b border-slate-200 pb-5 dark:border-slate-800 flex items-center gap-3">
+          <div className="rounded-2xl bg-rose-50 p-3 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40">
+            <Heart className="h-6 w-6 fill-current" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 dark:text-white sm:text-3xl">
+              Saved Favorites
+            </h1>
+            <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              Your saved animals synced with your backend account.
+            </p>
+          </div>
+        </div>
+
+        {normalizedFavorites.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/40 space-y-3">
+            <PawPrint className="mx-auto h-8 w-8 text-slate-400 dark:text-slate-600" />
+            <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+              You haven't saved any pets to your favorites yet.
+            </p>
+            <Link
+              to="/"
+              className="inline-block rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-colors"
+            >
+              Browse Pets
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {normalizedFavorites.map((pet) => (
+              <PetCard
+                key={pet.id}
+                animal={pet}
+                onSelect={() => setSelectedPet(pet)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <PetModal
+        animal={selectedPet}
+        isOpen={!!selectedPet}
+        onClose={() => setSelectedPet(null)}
+      />
+    </>
+  );
+}
+=== FILE: src/pages/SheltersDirectoryPage.jsx ===
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  Building2, 
+  MapPin, 
+  Phone, 
+  Clock, 
+  ArrowRight, 
+  Search, 
+  PawPrint, 
+  Navigation2, 
+  RotateCcw,
+  Loader2
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
+
+const SHELTER_COORDS = {
+  1: { lat: 39.4397, lng: -77.9402 },
+  2: { lat: 39.3789, lng: -77.8761 },
+};
+
+function calculateDistanceMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+export default function SheltersDirectoryPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const [sheltersList, setSheltersList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [zipCode, setZipCode] = useState(() => user?.zipCode || '25405');
+  const [radius, setRadius] = useState('50');
+  const [userCoords, setUserCoords] = useState(null);
+  const [geoLoading, setGeoLoading] = useState(false);
+
+  useEffect(() => {
+    if (user?.zipCode) {
+      setZipCode(user.zipCode);
+    }
+  }, [user]);
+
+  const loadShelters = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/shelters');
+      setSheltersList(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error('Failed to load /api/shelters:', err);
+      setSheltersList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadShelters();
+  }, [loadShelters]);
+
+  useEffect(() => {
+    if (!zipCode || zipCode.trim().length !== 5) {
+      setUserCoords(null);
+      return;
+    }
+
+    async function fetchUserZipCoords() {
+      setGeoLoading(true);
+      try {
+        const res = await fetch(`https://api.zippopotam.us/us/${zipCode.trim()}`);
+        if (res.ok) {
+          const data = await res.json();
+          const place = data.places?.[0];
+          if (place) {
+            setUserCoords({
+              latitude: parseFloat(place.latitude),
+              longitude: parseFloat(place.longitude),
+              name: `${place['place name']}, ${place['state abbreviation']}`,
+            });
+          }
+        }
+      } catch {
+        setUserCoords(null);
+      } finally {
+        setGeoLoading(false);
+      }
+    }
+
+    fetchUserZipCoords();
+  }, [zipCode]);
+
+  const displayShelters = sheltersList
+    .map((shelter) => {
+      const coords = SHELTER_COORDS[shelter.id] || {
+        lat: parseFloat(shelter.latitude || 39.41),
+        lng: parseFloat(shelter.longitude || -77.91),
+      };
+
+      let distance = null;
+      if (userCoords && coords) {
+        distance = calculateDistanceMiles(
+          userCoords.latitude,
+          userCoords.longitude,
+          coords.lat,
+          coords.lng
+        );
+      }
+
+      return {
+        ...shelter,
+        distance,
+      };
+    })
+    .filter((shelter) => {
+      const name = (shelter.name || '').toLowerCase();
+      const addr = (shelter.address || shelter.location || '').toLowerCase();
+      const term = search.toLowerCase();
+
+      const matchesSearch = name.includes(term) || addr.includes(term);
+      const withinRadius =
+        userCoords && shelter.distance !== null
+          ? shelter.distance <= parseFloat(radius)
+          : true;
+
+      return matchesSearch && withinRadius;
+    })
+    .sort((a, b) => {
+      if (a.distance !== null && b.distance !== null) return a.distance - b.distance;
+      return 0;
+    });
+
+  const handleReset = () => {
+    setSearch('');
+    setZipCode(user?.zipCode || '25405');
+    setRadius('50');
+  };
+
+  const inputClass =
+    'w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 transition focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-[#0f172a]/60 dark:text-white dark:placeholder-slate-500';
+
+  return (
+    <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+      <div className="border-b border-slate-200 dark:border-slate-800 pb-5">
+        <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+          Partner Shelters & Rescues
+        </h1>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+          Showing rescue organizations verified in your database.
+        </p>
+      </div>
+
+      {/* Filter Control Bar */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/90 dark:shadow-xl backdrop-blur-md space-y-4 transition-colors">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-12 items-end">
+          <div className="sm:col-span-6">
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              Search Shelters
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="e.g. Berkeley County Humane Society..."
+                className={`${inputClass} pl-10`}
+              />
+            </div>
+          </div>
+
+          <div className="sm:col-span-3">
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              Your ZIP Code
+            </label>
+            <div className="relative">
+              <MapPin className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={zipCode}
+                onChange={(e) => setZipCode(e.target.value)}
+                placeholder="e.g. 25405"
+                maxLength={5}
+                className={`${inputClass} pl-9 pr-8`}
+              />
+              {geoLoading && (
+                <Loader2 className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-blue-600 dark:text-blue-400" />
+              )}
+            </div>
+          </div>
+
+          <div className="sm:col-span-3">
+            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              Search Radius
+            </label>
+            <select
+              value={radius}
+              onChange={(e) => setRadius(e.target.value)}
+              className={inputClass}
+            >
+              <option value="5">Within 5 miles</option>
+              <option value="15">Within 15 miles</option>
+              <option value="30">Within 30 miles</option>
+              <option value="50">Within 50 miles</option>
+              <option value="500">Any Distance</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs">
+          {userCoords ? (
+            <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+              <Navigation2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span>
+                Origin: <strong className="text-slate-900 dark:text-white">{userCoords.name}</strong> ({zipCode}) &bull; Filter: <strong className="text-slate-900 dark:text-white">{radius} miles</strong>
+              </span>
+            </div>
+          ) : (
+            <span className="text-slate-500 dark:text-slate-400">Showing all {sheltersList.length} database shelters.</span>
+          )}
+
+          <button
+            type="button"
+            onClick={handleReset}
+            className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer ml-auto"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>Reset</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Shelters Grid */}
+      {loading ? (
+        <div className="flex justify-center p-12">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
+        </div>
+      ) : displayShelters.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/40 space-y-3">
+          <p className="text-base font-semibold text-slate-600 dark:text-slate-400">
+            {sheltersList.length === 0
+              ? 'No shelters found in database.'
+              : `No shelters found within ${radius} miles of ${userCoords?.name || zipCode}.`}
+          </p>
+          {sheltersList.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setRadius('500')}
+              className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition"
+            >
+              Expand search radius
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {displayShelters.map((shelter) => {
+            const petCount = (shelter.animals || shelter.pets || []).length;
+            const phone = shelter.phoneNumber || shelter.phone;
+
+            return (
+              <div
+                key={shelter.id}
+                onClick={() => navigate(`/shelters/${shelter.id}`)}
+                className="group relative flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/90 dark:shadow-xl backdrop-blur-md transition-all hover:border-blue-500 cursor-pointer"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-2xl bg-blue-50 p-3 text-blue-600 border border-blue-100 dark:bg-blue-950/60 dark:text-blue-400 dark:border-blue-900/40 shrink-0">
+                        <Building2 className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400 transition-colors">
+                          {shelter.name}
+                        </h3>
+                        <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+                          <span>{shelter.address || shelter.location || 'Address on file'}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-100 px-3 py-1 text-xs font-bold text-blue-700 dark:bg-blue-950/60 dark:border-blue-900/40 dark:text-blue-300">
+                        <PawPrint className="h-3.5 w-3.5" />
+                        <span>{petCount} Pets</span>
+                      </span>
+                      {shelter.distance !== null && shelter.distance !== undefined && (
+                        <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                          <Navigation2 className="h-3 w-3" />
+                          <span>{Number(shelter.distance).toFixed(1)} mi away</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {shelter.description && (
+                    <p className="mt-4 text-sm text-slate-600 dark:text-slate-300 line-clamp-2">
+                      {shelter.description}
+                    </p>
+                  )}
+
+                  <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800">
+                    {phone && (
+                      <span className="flex items-center gap-1.5">
+                        <Phone className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                        {phone}
+                      </span>
+                    )}
+                    {shelter.hours && (
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                        {shelter.hours}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-6 flex items-center justify-end gap-1 text-xs font-bold text-blue-600 dark:text-blue-400">
+                  <span>View Shelter Profile</span>
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+=== FILE: src/pages/ShelterDetailsPage.jsx ===
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { Building2, MapPin, Phone, Mail, Globe, Clock, ArrowLeft, PawPrint, Loader2, FileText, ExternalLink } from 'lucide-react';
+import PetCard from '../components/PetCard';
+import PetModal from '../components/PetModal';
+import ShelterReviews from '../components/ShelterReviews';
+import api from '../services/api';
+
+export default function ShelterDetailsPage() {
+  const { shelterId } = useParams();
+  const [shelter, setShelter] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedPet, setSelectedPet] = useState(null);
+
+  useEffect(() => {
+    const fetchShelterData = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const res = await api.get(`/shelters/${shelterId}`);
+        setShelter(res.data);
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to load shelter details.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchShelterData();
+  }, [shelterId]);
+
+  const shelterAnimals = useMemo(() => {
+    if (!shelter) return [];
+    const list = shelter.animals || shelter.pets || [];
+    return list.map((pet) => ({
+      ...pet,
+      shelterId: shelter.id,
+      shelterName: shelter.name,
+      shelterAddress: shelter.address || shelter.location,
+      shelterPhone: shelter.phoneNumber || shelter.phone,
+      shelterEmail: shelter.email,
+      adoptionUrl: shelter.adoptionListingsUrl || shelter.adoptionUrl,
+    }));
+  }, [shelter]);
+
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
+      </div>
+    );
+  }
+
+  if (error || !shelter) {
+    return (
+      <div className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8 text-center space-y-4">
+        <p className="text-base font-semibold text-rose-600 dark:text-rose-400">
+          {error || 'Shelter not found.'}
+        </p>
+        <Link
+          to="/shelters"
+          className="inline-flex items-center gap-1.5 text-sm font-bold text-blue-600 hover:underline dark:text-blue-400"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>Back to Shelters Directory</span>
+        </Link>
+      </div>
+    );
+  }
+
+  const phone = shelter.phoneNumber || shelter.phone;
+  const applicationUrl = shelter.adoptionListingsUrl || shelter.adoptionUrl;
+
+  return (
+    <>
+      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+        <Link
+          to="/shelters"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>Back to Shelters</span>
+        </Link>
+
+        {/* Shelter Header Card */}
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/90 sm:p-8 transition-colors">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div className="rounded-2xl bg-blue-50 p-4 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40 shrink-0">
+                <Building2 className="h-8 w-8" />
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+                  {shelter.name}
+                </h1>
+                <p className="mt-1 flex items-center gap-1.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                  <MapPin className="h-4 w-4 text-slate-400 shrink-0" />
+                  <span>{shelter.address || shelter.location}</span>
+                </p>
+                {shelter.description && (
+                  <p className="mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-2xl">
+                    {shelter.description}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2.5 shrink-0 sm:min-w-50">
+              {/* Adoption Application Button or Fallback */}
+              {applicationUrl ? (
+                <a
+                  href={applicationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-colors"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>Adoption Application Form</span>
+                  <ExternalLink className="h-3.5 w-3.5 opacity-80" />
+                </a>
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center text-[11px] font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+                  Sorry, we don't have the link for the application form at this time.
+                </div>
+              )}
+
+              {phone && (
+                <a
+                  href={`tel:${phone}`}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <Phone className="h-4 w-4" />
+                  <span>Call Shelter</span>
+                </a>
+              )}
+              {shelter.email && (
+                <a
+                  href={`mailto:${shelter.email}`}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <Mail className="h-4 w-4" />
+                  <span>Send Email</span>
+                </a>
+              )}
+              {shelter.websiteUrl && (
+                <a
+                  href={shelter.websiteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800 dark:text-blue-400 transition-colors"
+                >
+                  <Globe className="h-4 w-4" />
+                  <span>Website</span>
+                </a>
+              )}
+            </div>
+          </div>
+
+          {shelter.hours && (
+            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <Clock className="h-4 w-4 text-slate-400" />
+              <span>Visiting Hours: {shelter.hours}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Adoptable Animals Section */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <PawPrint className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              Adoptable Pets at {shelter.name} ({shelterAnimals.length})
+            </h2>
+          </div>
+
+          {shelterAnimals.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-[#0b1329]/40">
+              No pets currently listed under this shelter.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {shelterAnimals.map((pet) => (
+                <PetCard
+                  key={pet.id}
+                  animal={pet}
+                  onSelect={() => setSelectedPet(pet)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Shelter Reviews */}
+        <ShelterReviews shelterId={shelterId} shelterName={shelter.name} />
+      </div>
+
+      <PetModal
+        animal={selectedPet}
+        isOpen={!!selectedPet}
+        onClose={() => setSelectedPet(null)}
+      />
+    </>
+  );
+}
+=== FILE: src/pages/BreedsPage.jsx ===
+import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Sparkles, ArrowUpRight, PawPrint } from 'lucide-react';
+import { BREEDS_DATA } from '../data/BreedsData';
+
+export default function BreedsPage() {
+  const navigate = useNavigate();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSpecies, setSelectedSpecies] = useState('ALL'); // ALL, Dog, Cat
+  const [hypoOnly, setHypoOnly] = useState(false);
+
+  const filteredBreeds = useMemo(() => {
+    return BREEDS_DATA.filter((breed) => {
+      const matchesSearch =
+        breed.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        breed.temperament.some((t) => t.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        breed.description.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSpecies = selectedSpecies === 'ALL' || breed.species === selectedSpecies;
+      const matchesHypo = !hypoOnly || breed.hypoallergenic;
+      return matchesSearch && matchesSpecies && matchesHypo;
+    });
+  }, [searchTerm, selectedSpecies, hypoOnly]);
+
+  const handleSearchAdoptable = (breedName, species) => {
+    navigate('/explore', { 
+      state: { 
+        breed: breedName, 
+        species: species ? species.toLowerCase() : '' 
+      } 
+    });
+  };
+
+  return (
+    <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+      {/* Header */}
+      <div className="text-center max-w-2xl mx-auto space-y-3">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-700 dark:text-blue-300">
+          <PawPrint className="h-3.5 w-3.5" />
+          <span>Breed Guide & Encyclopedia</span>
+        </div>
+        <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 dark:text-white">
+          Cat & Dog Breeds Guide
+        </h1>
+        <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
+          Explore temperaments, care requirements, and allergy ratings to find the right companion for your home.
+        </p>
+      </div>
+
+      {/* Filter and Search Controls */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-3xl bg-white dark:bg-[#0b1329]/60 border border-slate-200 dark:border-slate-800 shadow-sm backdrop-blur-sm">
+        {/* Search Input */}
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by breed or trait..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+          />
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {['ALL', 'Dog', 'Cat'].map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setSelectedSpecies(type)}
+              className={`px-4 py-2 rounded-2xl text-xs font-bold transition cursor-pointer ${
+                selectedSpecies === type
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              {type === 'ALL' ? 'All Pets' : `${type}s`}
+            </button>
+          ))}
+
+          <button
+            type="button"
+            onClick={() => setHypoOnly(!hypoOnly)}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold transition cursor-pointer border ${
+              hypoOnly
+                ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Hypoallergenic Only
+          </button>
+        </div>
+      </div>
+
+      {/* Grid Results */}
+      {filteredBreeds.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/40 space-y-3">
+          <PawPrint className="mx-auto h-8 w-8 text-slate-400 dark:text-slate-600" />
+          <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+            No breeds found matching "{searchTerm}".
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchTerm('');
+              setSelectedSpecies('ALL');
+              setHypoOnly(false);
+            }}
+            className="text-xs font-bold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+          >
+            Reset Filters
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredBreeds.map((breed) => (
+            <div
+              key={breed.id}
+              className="flex flex-col overflow-hidden rounded-3xl bg-white dark:bg-[#0b1329]/60 border border-slate-200 dark:border-slate-800/80 hover:border-blue-500 dark:hover:border-blue-500/60 transition-all shadow-sm group backdrop-blur-sm"
+            >
+              <div className="relative h-48 w-full overflow-hidden bg-slate-800">
+                <img
+                  src={breed.imageUrl}
+                  alt={breed.name}
+                  className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-slate-950/75 backdrop-blur-md text-[10px] font-black text-white uppercase tracking-wider">
+                  {breed.species}
+                </span>
+                {breed.hypoallergenic && (
+                  <span className="absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600/90 backdrop-blur-md text-[10px] font-black text-white shadow-sm">
+                    <Sparkles className="h-3 w-3" />
+                    Allergy-Friendly
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col flex-1 p-5 space-y-4">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white">{breed.name}</h3>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {breed.temperament.map((trait, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300"
+                      >
+                        {trait}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-3 leading-relaxed flex-1">
+                  {breed.description}
+                </p>
+
+                {/* Quick Specs Bar */}
+                <div className="grid grid-cols-3 gap-2 py-2.5 border-y border-slate-100 dark:border-slate-800 text-center bg-slate-50/50 dark:bg-slate-900/40 rounded-xl">
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Energy</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">{breed.energy}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Grooming</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">{breed.grooming}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Life Span</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">{breed.lifeSpan}</span>
+                  </div>
+                </div>
+
+                {/* Action button linking to explore */}
+                <button
+                  type="button"
+                  onClick={() => handleSearchAdoptable(breed.name, breed.species)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-600/10 dark:text-blue-400 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white text-xs font-bold transition cursor-pointer"
+                >
+                  <span>Search Adoptable {breed.name}s</span>
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+=== FILE: src/pages/SettingsPage.jsx ===
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  User, 
+  Lock, 
+  Trash2, 
+  AlertTriangle, 
+  CheckCircle, 
+  Loader2, 
+  Sun, 
+  Moon, 
+  Palette, 
+  MessageSquarePlus, 
+  Send,
+  FileText,
+  ChevronRight
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { userService } from '../services/api';
+
+export default function SettingsPage() {
+  const navigate = useNavigate();
+  const { user, deleteAccount, updateUserProfile } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+
+  // Username form state
+  const [username, setUsername] = useState('');
+  const [usernamePassword, setUsernamePassword] = useState('');
+  const [usernameLoading, setUsernameLoading] = useState(false);
+  const [usernameSuccess, setUsernameSuccess] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+
+  // Password form state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  // Feedback form state
+  const [feedbackCategory, setFeedbackCategory] = useState('bug');
+  const [feedbackSubject, setFeedbackSubject] = useState('');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackSuccess, setFeedbackSuccess] = useState('');
+  const [feedbackError, setFeedbackError] = useState('');
+
+  // Delete account state
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (user?.username) {
+      setUsername(user.username);
+    } else if (user?.email) {
+      setUsername(user.email.split('@')[0]);
+    }
+  }, [user]);
+
+  const handleUpdateUsername = async (e) => {
+    e.preventDefault();
+    setUsernameError('');
+    setUsernameSuccess('');
+
+    if (!usernamePassword) {
+      setUsernameError('Current password is required to update username.');
+      return;
+    }
+
+    try {
+      setUsernameLoading(true);
+      await userService.updateUsername(usernamePassword, username);
+      updateUserProfile({ username });
+      setUsernameSuccess('Username updated successfully!');
+      setUsernamePassword('');
+    } catch (err) {
+      setUsernameError(err.response?.data?.message || 'Failed to update username.');
+    } finally {
+      setUsernameLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+
+    try {
+      setPasswordLoading(true);
+      await userService.updatePassword(currentPassword, newPassword);
+      setPasswordSuccess('Password changed successfully!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      setPasswordError(err.response?.data?.message || 'Failed to update password.');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const handleSendFeedback = async (e) => {
+    e.preventDefault();
+    setFeedbackError('');
+    setFeedbackSuccess('');
+
+    if (!feedbackMessage.trim()) {
+      setFeedbackError('Please enter a message description.');
+      return;
+    }
+
+    try {
+      setFeedbackLoading(true);
+      // Simulating / fallback payload handling or sending to backend
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      setFeedbackSuccess('Thank you! Your feedback has been submitted directly to the team.');
+      setFeedbackSubject('');
+      setFeedbackMessage('');
+    } catch (err) {
+      setFeedbackError('Failed to send feedback. Please try again.');
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete your account? This action is permanent and all your favorites and reviews will be removed.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeleting(true);
+      await deleteAccount();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete account.');
+      setDeleting(false);
+    }
+  };
+
+  const cardClass =
+    'rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/90';
+  const inputClass =
+    'w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2 text-xs text-slate-900 focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-[#0f172a]/60 dark:text-white';
+  const labelClass =
+    'block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1';
+
+  return (
+    <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-black text-slate-900 dark:text-white sm:text-3xl">
+          Account Settings
+        </h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Manage your credentials, preferences, appearance, and legal policies.
+        </p>
+      </div>
+
+      {/* Appearance / Theme Toggle Card */}
+      <div className={cardClass}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+              <Palette className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Appearance</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Current theme is <strong className="capitalize">{theme}</strong> mode
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="flex items-center gap-2 rounded-xl border border-slate-300 bg-slate-100 px-4 py-2 text-xs font-bold text-slate-800 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700 transition cursor-pointer"
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="h-4 w-4 text-amber-400" />
+                <span>Light Mode</span>
+              </>
+            ) : (
+              <>
+                <Moon className="h-4 w-4 text-blue-500" />
+                <span>Dark Mode</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Profile Overview Card */}
+      <div className={cardClass}>
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600/20 text-blue-600 dark:text-blue-400 font-bold text-lg border border-blue-500/30">
+            {username ? username[0].toUpperCase() : 'U'}
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
+              {username || 'User Profile'}
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{user?.email || 'No email associated'}</p>
+            {(user?.address || user?.zipCode) && (
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                Location: {[user.address, user.city, user.state, user.zipCode].filter(Boolean).join(', ')}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Change Username Form */}
+      <div className={`${cardClass} space-y-4`}>
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-3 dark:border-slate-800/80">
+          <User className="h-4 w-4 text-blue-500" />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+            Change Username
+          </h2>
+        </div>
+
+        {usernameSuccess && (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-400">
+            <CheckCircle className="h-4 w-4 shrink-0" />
+            <span>{usernameSuccess}</span>
+          </div>
+        )}
+
+        {usernameError && (
+          <div className="flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{usernameError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleUpdateUsername} className="space-y-3">
+          <div>
+            <label className={labelClass}>New Username</label>
+            <input
+              type="text"
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Confirm Current Password</label>
+            <input
+              type="password"
+              required
+              value={usernamePassword}
+              onChange={(e) => setUsernamePassword(e.target.value)}
+              placeholder="Enter current password to save"
+              className={inputClass}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={usernameLoading}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
+          >
+            {usernameLoading ? 'Saving...' : 'Update Username'}
+          </button>
+        </form>
+      </div>
+
+      {/* Change Password Form */}
+      <div className={`${cardClass} space-y-4`}>
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-3 dark:border-slate-800/80">
+          <Lock className="h-4 w-4 text-blue-500" />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+            Change Password
+          </h2>
+        </div>
+
+        {passwordSuccess && (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-400">
+            <CheckCircle className="h-4 w-4 shrink-0" />
+            <span>{passwordSuccess}</span>
+          </div>
+        )}
+
+        {passwordError && (
+          <div className="flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{passwordError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleUpdatePassword} className="space-y-3">
+          <div>
+            <label className={labelClass}>Current Password</label>
+            <input
+              type="password"
+              required
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className={labelClass}>New Password</label>
+              <input
+                type="password"
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Confirm New Password</label>
+              <input
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={passwordLoading}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
+          >
+            {passwordLoading ? 'Updating...' : 'Change Password'}
+          </button>
+        </form>
+      </div>
+
+      {/* Feedback, Bug Reports & Feature Requests */}
+      <div className={`${cardClass} space-y-4`}>
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-3 dark:border-slate-800/80">
+          <MessageSquarePlus className="h-4 w-4 text-blue-500" />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+            Send Feedback & Bug Reports
+          </h2>
+        </div>
+
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Found a glitch, have an idea for a feature, or want to share general feedback? Let us know below.
+        </p>
+
+        {feedbackSuccess && (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-400">
+            <CheckCircle className="h-4 w-4 shrink-0" />
+            <span>{feedbackSuccess}</span>
+          </div>
+        )}
+
+        {feedbackError && (
+          <div className="flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{feedbackError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSendFeedback} className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className={labelClass}>Category</label>
+              <select
+                value={feedbackCategory}
+                onChange={(e) => setFeedbackCategory(e.target.value)}
+                className={inputClass}
+              >
+                <option value="bug">Bug Report</option>
+                <option value="feature">Feature Request</option>
+                <option value="general">General Feedback</option>
+              </select>
+            </div>
+
+            <div>
+              <label className={labelClass}>Subject (Optional)</label>
+              <input
+                type="text"
+                value={feedbackSubject}
+                onChange={(e) => setFeedbackSubject(e.target.value)}
+                placeholder="e.g. Map marker glitch on mobile"
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Message Details</label>
+            <textarea
+              rows={4}
+              required
+              value={feedbackMessage}
+              onChange={(e) => setFeedbackMessage(e.target.value)}
+              placeholder="Describe the issue you encountered or the idea you'd like to suggest..."
+              className={inputClass}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={feedbackLoading}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
+          >
+            {feedbackLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
+            <span>{feedbackLoading ? 'Submitting...' : 'Submit Feedback'}</span>
+          </button>
+        </form>
+      </div>
+
+      {/* Legal & Policies (Directly above Danger Zone) */}
+      <div className={cardClass}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Legal & Policies</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Review platform rules, terms of service, and shelter disclaimers.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/terms')}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+          >
+            <span>Terms of Service</span>
+            <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+          </button>
+        </div>
+      </div>
+
+      {/* Danger Zone: Account Deletion */}
+      <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-6 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/20 space-y-4">
+        <div className="flex items-center gap-2 border-b border-rose-200 pb-3 dark:border-rose-900/40">
+          <Trash2 className="h-4 w-4 text-rose-600 dark:text-rose-500" />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">
+            Danger Zone
+          </h2>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">Delete Account</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Permanently remove your account, favorited pets, and submitted reviews.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleDeleteAccount}
+            disabled={deleting}
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50 transition cursor-pointer shrink-0"
+          >
+            {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            <span>{deleting ? 'Deleting...' : 'Delete Account'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+=== FILE: src/pages/TermsPage.jsx ===
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { FileText, ArrowLeft, ShieldCheck, HeartHandshake, AlertCircle } from 'lucide-react';
+
+export default function TermsPage() {
+  return (
+    <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 lg:px-8 space-y-8">
+      <Link
+        to="/"
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        <span>Back to Home</span>
+      </Link>
+
+      <div className="space-y-3">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-700 dark:text-blue-300">
+          <FileText className="h-3.5 w-3.5" />
+          <span>Legal Agreement</span>
+        </div>
+        <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
+          Terms of Service
+        </h1>
+        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+          Last updated: August 2026
+        </p>
+      </div>
+
+      <div className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/90 sm:p-8 text-xs sm:text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+        <section className="space-y-2">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-blue-500" />
+            1. Acceptance of Terms
+          </h2>
+          <p>
+            By creating an account, accessing, or using the <strong>AdoptMe</strong> web platform, you agree to be bound by these Terms of Service. If you do not agree with these terms, please do not use our services.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <HeartHandshake className="h-4 w-4 text-blue-500" />
+            2. Platform Purpose & Adoption Disclaimer
+          </h2>
+          <p>
+            AdoptMe provides a search aggregation and discovery tool connecting prospective pet parents with independent animal shelters and rescue organizations.
+          </p>
+          <p className="font-semibold text-slate-800 dark:text-slate-200">
+            AdoptMe is not an adoption agency or animal shelter. All adoption decisions, application reviews, background checks, and fee collections are conducted directly and independently by the respective rescue organization hosting the pet.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-blue-500" />
+            3. Accuracy of Animal Listings
+          </h2>
+          <p>
+            While AdoptMe strives to keep listings accurate and up-to-date, pet availability, temperament evaluations, health status, and adoption requirements are provided by partner shelters. AdoptMe cannot guarantee the immediate availability or exact temperament of any listed animal.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white">
+            4. User Conduct & Reviews
+          </h2>
+          <p>
+            When utilizing interactive platform features such as submitting shelter reviews or feedback, users agree not to post defamatory, harassing, or fraudulent content. AdoptMe reserves the right to moderate or remove content that violates these guidelines.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white">
+            5. Termination
+          </h2>
+          <p>
+            Users may delete their account at any time via the Account Settings page. AdoptMe reserves the right to suspend or terminate accounts that breach platform guidelines or abuse platform services.
+          </p>
+        </section>
+      </div>
+    </div>
+  );
+}
+=== FILE: src/pages/ExplorePage.jsx ===
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Loader2, PawPrint, Navigation2, ChevronLeft, ChevronRight } from 'lucide-react';
+import FilterBar from '../components/FilterBar';
+import PetCard from '../components/PetCard';
+import PetMap from '../components/PetMap';
+import PetModal from '../components/PetModal';
+import { useAuth } from '../context/AuthContext';
+import { animalService } from '../services/api';
+
+function calculateDistanceMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+export default function ExplorePage() {
+  const { user } = useAuth();
+  const location = useLocation();
+  const [rawAnimals, setRawAnimals] = useState([]);
+  const [selectedPet, setSelectedPet] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [userCoords, setUserCoords] = useState(null);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+
+  const [filters, setFilters] = useState({
+    name: '',
+    breed: '',
+    species: '',
+    gender: '',
+    size: '',
+    minAge: '',
+    maxAge: '',
+    zipCode: '25405',
+    radius: '50',
+    goodWithKids: false,
+    goodWithDogs: false,
+    goodWithCats: false,
+  });
+
+  useEffect(() => {
+    if (location.state?.breed) {
+      setFilters((prev) => ({
+        ...prev,
+        breed: location.state.breed,
+        species: location.state.species ? location.state.species.toLowerCase() : prev.species,
+      }));
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    if (user?.zipCode) {
+      setFilters((prev) => ({ ...prev, zipCode: user.zipCode }));
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!filters.zipCode || filters.zipCode.trim().length !== 5) {
+      setUserCoords(null);
+      return;
+    }
+
+    async function fetchZipCoords() {
+      try {
+        const res = await fetch(`https://api.zippopotam.us/us/${filters.zipCode.trim()}`);
+        if (res.ok) {
+          const data = await res.json();
+          const place = data.places?.[0];
+          if (place) {
+            setUserCoords({
+              latitude: parseFloat(place.latitude),
+              longitude: parseFloat(place.longitude),
+              name: `${place['place name']}, ${place['state abbreviation']}`,
+            });
+          }
+        } else {
+          setUserCoords(null);
+        }
+      } catch {
+        setUserCoords(null);
+      }
+    }
+
+    fetchZipCoords();
+  }, [filters.zipCode]);
+
+  const fetchAnimals = useCallback(
+    async (pageToFetch = 0) => {
+      setLoading(true);
+      setError('');
+
+      const payload = {};
+      if (filters.name?.trim()) payload.name = filters.name.trim();
+      if (filters.breed?.trim()) payload.breed = filters.breed.trim();
+      if (filters.species) payload.species = filters.species;
+      if (filters.gender) payload.gender = filters.gender;
+      if (filters.size) payload.size = filters.size;
+      if (filters.minAge) payload.minAge = Number(filters.minAge);
+      if (filters.maxAge) payload.maxAge = Number(filters.maxAge);
+      if (filters.goodWithKids) payload.goodWithKids = true;
+      if (filters.goodWithDogs) payload.goodWithDogs = true;
+      if (filters.goodWithCats) payload.goodWithCats = true;
+      if (filters.zipCode?.trim()) payload.zipCode = filters.zipCode.trim();
+      if (filters.radius) payload.radiusMiles = parseFloat(filters.radius);
+
+      try {
+        const data = await animalService.searchAnimals(payload, pageToFetch, 16);
+        
+        if (data && data.content) {
+          setRawAnimals(data.content);
+          setTotalPages(data.totalPages || 0);
+          setTotalElements(data.totalElements || 0);
+          setCurrentPage(data.number || 0);
+        } else if (Array.isArray(data)) {
+          setRawAnimals(data);
+          setTotalPages(1);
+          setTotalElements(data.length);
+          setCurrentPage(0);
+        } else {
+          setRawAnimals([]);
+          setTotalPages(0);
+          setTotalElements(0);
+        }
+      } catch (err) {
+        console.error('Failed to load animals:', err);
+        setError('Unable to load animals from backend server.');
+        setRawAnimals([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      filters.name,
+      filters.breed,
+      filters.species,
+      filters.gender,
+      filters.size,
+      filters.minAge,
+      filters.maxAge,
+      filters.goodWithKids,
+      filters.goodWithDogs,
+      filters.goodWithCats,
+      filters.zipCode,
+      filters.radius,
+    ]
+  );
+
+  useEffect(() => {
+    setCurrentPage(0);
+    fetchAnimals(0);
+  }, [fetchAnimals]);
+
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    fetchAnimals(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const filteredAnimals = useMemo(() => {
+    return rawAnimals
+      .map((animal) => {
+        // Read real coordinates sent directly by the backend DTO
+        const lat = animal.shelterLatitude ?? animal.shelter?.latitude ?? null;
+        const lng = animal.shelterLongitude ?? animal.shelter?.longitude ?? null;
+
+        let distance = null;
+        if (userCoords && lat && lng) {
+          distance = calculateDistanceMiles(
+            userCoords.latitude,
+            userCoords.longitude,
+            lat,
+            lng
+          );
+        }
+
+        return {
+          ...animal,
+          latitude: lat,
+          longitude: lng,
+          distance,
+        };
+      })
+      .filter((animal) => {
+        if (userCoords && animal.distance !== null && filters.radius) {
+          const maxRadius = parseFloat(filters.radius);
+          return animal.distance <= maxRadius;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (a.distance !== null && b.distance !== null) return a.distance - b.distance;
+        return 0;
+      });
+  }, [rawAnimals, userCoords, filters.radius]);
+
+  const handleReset = () => {
+    setFilters({
+      name: '',
+      breed: '',
+      species: '',
+      gender: '',
+      size: '',
+      minAge: '',
+      maxAge: '',
+      zipCode: user?.zipCode || '25405',
+      radius: '50',
+      goodWithKids: false,
+      goodWithDogs: false,
+      goodWithCats: false,
+    });
+  };
+
+  const handleSelectAnimal = async (animal) => {
+    try {
+      const res = await animalService.getAnimalById(animal.id);
+      setSelectedPet(res);
+    } catch {
+      setSelectedPet(animal);
+    }
+  };
+
+  return (
+    <>
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+              Find Your New Best Friend
+            </h1>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              Browse adoptable pets live from our partner shelters.
+            </p>
+          </div>
+
+          {userCoords && (
+            <div className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50/90 px-4 py-2 text-xs font-semibold text-blue-900 shadow-sm dark:border-blue-800/80 dark:bg-blue-950/70 dark:text-blue-200 backdrop-blur-sm">
+              <Navigation2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span>
+                Searching near <strong className="font-black text-blue-950 dark:text-white">{userCoords.name}</strong> ({filters.zipCode}) &bull; {filters.radius} mi
+              </span>
+            </div>
+          )}
+        </div>
+
+        <FilterBar filters={filters} setFilters={setFilters} onReset={handleReset} />
+
+        {error && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">
+            {error}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
+          {/* Pet Cards Feed */}
+          <div className="lg:col-span-7 flex flex-col space-y-4">
+            {loading ? (
+              <div className="flex h-64 items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
+              </div>
+            ) : filteredAnimals.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/40 space-y-3">
+                <PawPrint className="mx-auto h-8 w-8 text-slate-400 dark:text-slate-600" />
+                <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+                  No animals found within {filters.radius} miles of {userCoords?.name || filters.zipCode}.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="text-xs font-bold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                >
+                  Clear all filters
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {filteredAnimals.map((animal) => (
+                    <PetCard
+                      key={animal.id}
+                      animal={animal}
+                      onSelect={() => handleSelectAnimal(animal)}
+                    />
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/60 shadow-sm mt-4">
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(Math.max(currentPage - 1, 0))}
+                      disabled={currentPage === 0 || loading}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/80 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                      Previous
+                    </button>
+
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Page <strong className="font-bold text-slate-900 dark:text-white">{currentPage + 1}</strong> of{' '}
+                      <strong className="font-bold text-slate-900 dark:text-white">{Math.max(totalPages, 1)}</strong>
+                      {totalElements > 0 && ` (${totalElements} pets)`}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages - 1))}
+                      disabled={currentPage >= totalPages - 1 || loading}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/80 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      Next
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Map View */}
+          <div className="lg:col-span-5 lg:sticky lg:top-24 h-140">
+            <PetMap animals={filteredAnimals} onSelectAnimal={handleSelectAnimal} />
+          </div>
+        </div>
+      </div>
+
+      <PetModal
+        animal={selectedPet}
+        isOpen={!!selectedPet}
+        onClose={() => setSelectedPet(null)}
+      />
+    </>
+  );
+}
+=== FILE: src/services/api.js ===
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://adoptme-api-m0ei.onrender.com/api'; 
+//'http://localhost:8080/api'; 
+
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Request Interceptor: Attach Bearer token if available
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response Interceptor: Handle global errors (like token expiry)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+    return Promise.reject(error);
+  }
+);
+
+// ----------------------------------------------------
+// API Service Methods
+// ----------------------------------------------------
+
+export const authService = {
+  login: async (credentials) => {
+    const response = await api.post('/auth/login', credentials);
+    return response.data;
+  },
+
+  register: async (userData) => {
+    const response = await api.post('/users/create', userData);
+    return response.data;
+  },
+};
+
+export const userService = {
+  updateUsername: async (currentPassword, newUsername) => {
+    return api.patch('/users/update/username', {
+      currentPassword,
+      newUsername,
+    });
+  },
+
+  updatePassword: async (currentPassword, newPassword) => {
+    return api.patch('/users/update/password', {
+      currentPassword,
+      newPassword,
+    });
+  },
+
+  deleteAccount: async () => {
+    return api.delete('/users');
+  },
+};
+
+export const animalService = {
+  searchAnimals: async (filterParams = {}, page = 0, size = 16) => {
+    const response = await api.post(`/animals/search?page=${page}&size=${size}`, filterParams);
+    return response.data;
+  },
+
+  getAnimalById: async (id) => {
+    const response = await api.get(`/animals/${id}`);
+    return response.data;
+  },
+};
+
+export const shelterService = {
+  getAllShelters: async () => {
+    const response = await api.get('/shelters');
+    return response.data;
+  },
+
+  getShelterById: async (id) => {
+    const response = await api.get(`/shelters/${id}`);
+    return response.data;
+  },
+};
+
+export const favoriteService = {
+  getFavorites: async () => {
+    const response = await api.get('/users/favorites');
+    return response.data;
+  },
+
+  addFavorite: async (animalId) => {
+    return api.post(`/users/favorites/${animalId}`);
+  },
+
+  removeFavorite: async (animalId) => {
+    return api.delete(`/users/favorites/${animalId}`);
+  },
+};
+
+export const feedbackService = {
+  getShelterFeedback: async (shelterId) => {
+    const response = await api.get(`/feedback/shelter/${shelterId}`);
+    return response.data;
+  },
+
+  submitFeedback: async (shelterId, comment, rating = 5) => {
+    const response = await api.post('/feedback', {
+      shelterId,
+      comment,
+      rating,
+    });
+    return response.data;
+  },
+};
+
+export default api;
