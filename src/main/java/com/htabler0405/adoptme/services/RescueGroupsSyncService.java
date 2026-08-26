@@ -220,60 +220,86 @@ public class RescueGroupsSyncService {
     }
 
     private String detectSpecies(String rawSpecies, String breed) {
-        if (rawSpecies != null && !rawSpecies.isBlank()) {
-            String lower = rawSpecies.toLowerCase();
-            if (lower.contains("cat") || lower.contains("feline")) return "Cat";
-            if (lower.contains("dog") || lower.contains("canine")) return "Dog";
-            if (lower.contains("rabbit") || lower.contains("bunny")) return "Rabbit";
-            if (lower.contains("bird") || lower.contains("avian")) return "Bird";
-            if (lower.contains("horse") || lower.contains("equine")) return "Horse";
-            if (lower.contains("small") || lower.contains("furry") || lower.contains("rodent")) return "Small & Furry";
-            return capitalize(rawSpecies);
+        String s = (rawSpecies != null ? rawSpecies.trim().toLowerCase() : "");
+        String b = (breed != null ? breed.trim().toLowerCase() : "");
+        String combined = (s + " " + b).trim();
+
+        // 1. Direct explicit API species matching
+        if (s.equals("dog") || s.equals("dogs") || s.equals("canine")) return "Dog";
+        if (s.equals("cat") || s.equals("cats") || s.equals("feline")) return "Cat";
+        if (s.equals("bird") || s.equals("birds") || s.equals("avian")) return "Bird";
+        if (s.equals("rabbit") || s.equals("rabbits")) return "Rabbit";
+        if (s.equals("horse") || s.equals("horses") || s.equals("equine")) return "Horse";
+        if (s.contains("small") || s.contains("furry") || s.equals("rodent")) return "Small & Furry";
+
+        // 2. High-precision Dog Breed Signatures
+        if (combined.contains("dog") || combined.contains("canine") || combined.contains("shepherd") ||
+            combined.contains("poodle") || combined.contains("terrier") || combined.contains("retriever") ||
+            combined.contains("hound") || combined.contains("pyrenees") || combined.contains("husky") ||
+            combined.contains("collie") || combined.contains("sheepdog") || combined.contains("mastiff") ||
+            combined.contains("chihuahua") || combined.contains("pit bull") || combined.contains("bully") ||
+            combined.contains("bulldog") || combined.contains("beagle") || combined.contains("boxer") ||
+            combined.contains("rottweiler") || combined.contains("corgi") || combined.contains("dachshund") ||
+            combined.contains("pinscher") || combined.contains("schnauzer") || combined.contains("spaniel") ||
+            combined.contains("setter") || combined.contains("pointer") || combined.contains("great dane") ||
+            combined.contains("malamute") || combined.contains("akita") || combined.contains("cattle dog") ||
+            combined.contains("heeler") || combined.contains("kelpie") || combined.contains("whippet") ||
+            combined.contains("greyhound") || combined.contains("labrador") || combined.contains("golden") ||
+            combined.contains("bernese") || combined.contains("saint bernard") || combined.contains("newfoundland") ||
+            combined.contains("pug") || combined.contains("maltese") || combined.contains("shih tzu") ||
+            combined.contains("havanese") || combined.contains("bichon") || combined.contains("pomeranian") ||
+            combined.contains("australian shepherd") || combined.contains("dutch shepherd")) {
+            return "Dog";
         }
 
-        if (breed != null && !breed.isBlank()) {
-            String b = breed.toLowerCase();
+        // 3. Cat Breed Signatures
+        if (combined.contains("cat") || combined.contains("feline") || combined.contains("kitten") ||
+            combined.contains("shorthair") || combined.contains("longhair") || combined.contains("mediumhair") ||
+            combined.contains("siamese") || combined.contains("tabby") || combined.contains("persian") ||
+            combined.contains("maine coon") || combined.contains("calico") || combined.contains("tortoiseshell") ||
+            combined.contains("ragdoll") || combined.contains("bengal") || combined.contains("sphynx") ||
+            combined.contains("abyssinian") || combined.contains("burmese") || combined.contains("russian blue") ||
+            combined.contains("tuxedo") || combined.contains("domestic")) {
+            return "Cat";
+        }
 
-            // Cats
-            if (b.contains("cat") || b.contains("domestic short") || b.contains("domestic long") ||
-                b.contains("domestic medium") || b.contains("siamese") || b.contains("tabby") ||
-                b.contains("persian") || b.contains("maine coon") || b.contains("calico") ||
-                b.contains("tortoiseshell") || b.contains("shorthair") || b.contains("longhair") ||
-                b.contains("ragdoll") || b.contains("bengal") || b.contains("sphynx") ||
-                b.contains("abyssinian") || b.contains("burmese") || b.contains("russian blue")) {
-                return "Cat";
-            }
+        // 4. Bird Signatures (Pigeon, Dove, Parrot, etc.)
+        if (combined.contains("bird") || combined.contains("pigeon") || combined.contains("dove") ||
+            combined.contains("parrot") || combined.contains("parakeet") || combined.contains("cockatiel") ||
+            combined.contains("cockatoo") || combined.contains("macaw") || combined.contains("conure") ||
+            combined.contains("finch") || combined.contains("canary") || combined.contains("lovebird") ||
+            combined.contains("budgie") || combined.contains("african grey") || combined.contains("chicken") ||
+            combined.contains("duck") || combined.contains("goose")) {
+            return "Bird";
+        }
 
-            // Rabbits
-            if (b.contains("rabbit") || b.contains("bunny") || b.contains("new zealand") ||
-                b.contains("holland lop") || b.contains("mini lop") || b.contains("lionhead") ||
-                b.contains("flemish giant") || b.contains("netherland dwarf") || b.contains("rex") ||
-                b.contains("dutch") || b.contains("angora") || b.contains("harlequin") ||
-                b.contains("havana") || b.contains("chinchilla rabbit") || b.contains("lop")) {
-                return "Rabbit";
-            }
+        // 5. Rabbit Signatures
+        if (combined.contains("rabbit") || combined.contains("bunny") || combined.contains("holland lop") ||
+            combined.contains("mini lop") || combined.contains("lionhead") || combined.contains("flemish giant") ||
+            combined.contains("netherland dwarf") || combined.contains("rex rabbit") || combined.contains("angora rabbit") ||
+            combined.contains("harlequin rabbit") || combined.contains("chinchilla rabbit")) {
+            return "Rabbit";
+        }
 
-            // Birds
-            if (b.contains("bird") || b.contains("parrot") || b.contains("cockatiel") ||
-                b.contains("parakeet") || b.contains("macaw") || b.contains("conure") ||
-                b.contains("cockatoo") || b.contains("finch") || b.contains("canary") ||
-                b.contains("lovebird") || b.contains("budgie") || b.contains("african grey")) {
-                return "Bird";
-            }
+        // 6. Small & Furry Signatures
+        if (combined.contains("guinea pig") || combined.contains("hamster") || combined.contains("ferret") ||
+            combined.contains("chinchilla") || combined.contains("hedgehog") || combined.contains("gerbil") ||
+            combined.contains("mouse") || combined.contains("rat") || combined.contains("sugar glider") ||
+            combined.contains("rodent")) {
+            return "Small & Furry";
+        }
 
-            // Small & Furry
-            if (b.contains("guinea pig") || b.contains("hamster") || b.contains("ferret") ||
-                b.contains("chinchilla") || b.contains("hedgehog") || b.contains("gerbil") ||
-                b.contains("mouse") || b.contains("rat") || b.contains("sugar glider")) {
-                return "Small & Furry";
-            }
+        // 7. Horse & Equine Signatures
+        if (combined.contains("horse") || combined.contains("equine") || combined.contains("pony") ||
+            combined.contains("thoroughbred") || combined.contains("quarter horse") || combined.contains("arabian horse") ||
+            combined.contains("appaloosa") || combined.contains("mustang") || combined.contains("clydesdale") ||
+            combined.contains("morgan horse") || combined.contains("warmblood") || combined.contains("stallion") ||
+            combined.contains("mare") || combined.contains("gelding") || combined.contains("foal")) {
+            return "Horse";
+        }
 
-            // Horses & Farm
-            if (b.contains("horse") || b.contains("pony") || b.contains("thoroughbred") ||
-                b.contains("quarter horse") || b.contains("arabian") || b.contains("appaloosa") ||
-                b.contains("goat") || b.contains("pig") || b.contains("sheep")) {
-                return "Horse";
-            }
+        if (rawSpecies != null && !rawSpecies.isBlank()) {
+            return capitalize(rawSpecies);
         }
 
         return "Dog";

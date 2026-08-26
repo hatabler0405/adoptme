@@ -1,5 +1,5 @@
 import React from 'react';
-import { RotateCcw, Search, MapPin } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 
 export default function FilterBar({ filters, setFilters, onReset }) {
   const handleChange = (key, value) => {
@@ -53,15 +53,16 @@ export default function FilterBar({ filters, setFilters, onReset }) {
         <div className="sm:col-span-2">
           <label className={labelClass}>Distance</label>
           <select
-            value={filters.radius || '50'}
+            value={filters.radius || ''}
             onChange={(e) => handleChange('radius', e.target.value)}
             className={inputClass}
           >
+            <option value="">Any Distance</option>
             <option value="5">Within 5 mi</option>
             <option value="15">Within 15 mi</option>
             <option value="30">Within 30 mi</option>
             <option value="50">Within 50 mi</option>
-            <option value="500">Any Distance</option>
+            <option value="100">Within 100 mi</option>
           </select>
         </div>
       </div>
@@ -78,9 +79,10 @@ export default function FilterBar({ filters, setFilters, onReset }) {
             <option value="">All Species</option>
             <option value="DOG">Dogs</option>
             <option value="CAT">Cats</option>
-            <option value="BIRD">BIRD</option>
-            <option value="RABBIT">RABBIT</option>
-            <option value="BUNNY">BUNNY</option>
+            <option value="BIRD">Birds</option>
+            <option value="RABBIT">Rabbits</option>
+            <option value="HORSE">Horses</option>
+            <option value="SMALL & FURRY">Small & Furry</option>
           </select>
         </div>
 
@@ -108,6 +110,7 @@ export default function FilterBar({ filters, setFilters, onReset }) {
             <option value="SMALL">Small</option>
             <option value="MEDIUM">Medium</option>
             <option value="LARGE">Large</option>
+            <option value="EXTRA_LARGE">Extra Large</option>
           </select>
         </div>
 

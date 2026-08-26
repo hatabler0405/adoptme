@@ -1,7 +1,67 @@
 import React from 'react';
-import { Heart, MapPin, DollarSign } from 'lucide-react';
+import { Heart, MapPin } from 'lucide-react';
 import { useFavorites } from '../context/FavoritesContext';
 import { useAuth } from '../context/AuthContext';
+
+function resolveSpeciesDisplay(animal) {
+  const breed = (animal.breed || animal.animalBreed || '').toLowerCase();
+  const rawSpecies = (animal.species || animal.animalSpecies || '').toUpperCase();
+
+  // Guard against dogs misclassified as Rabbit, Horse, Small & Furry, etc.
+  if (
+    breed.includes('shepherd') ||
+    breed.includes('terrier') ||
+    breed.includes('poodle') ||
+    breed.includes('retriever') ||
+    breed.includes('hound') ||
+    breed.includes('pyrenees') ||
+    breed.includes('collie') ||
+    breed.includes('sheepdog') ||
+    breed.includes('mastiff') ||
+    breed.includes('chihuahua') ||
+    breed.includes('beagle') ||
+    breed.includes('boxer') ||
+    breed.includes('husky') ||
+    breed.includes('corgi') ||
+    breed.includes('spaniel')
+  ) {
+    return 'Dog';
+  }
+
+  // Guard against birds misclassified as Horse
+  if (
+    breed.includes('pigeon') ||
+    breed.includes('dove') ||
+    breed.includes('parrot') ||
+    breed.includes('cockatiel') ||
+    breed.includes('parakeet') ||
+    breed.includes('finch')
+  ) {
+    return 'Bird';
+  }
+
+  // Guard against cats
+  if (
+    breed.includes('shorthair') ||
+    breed.includes('longhair') ||
+    breed.includes('siamese') ||
+    breed.includes('tabby') ||
+    breed.includes('persian') ||
+    breed.includes('maine coon')
+  ) {
+    return 'Cat';
+  }
+
+  // Format capitalized output
+  if (rawSpecies === 'DOG') return 'Dog';
+  if (rawSpecies === 'CAT') return 'Cat';
+  if (rawSpecies === 'BIRD') return 'Bird';
+  if (rawSpecies === 'RABBIT') return 'Rabbit';
+  if (rawSpecies === 'HORSE') return 'Horse';
+  if (rawSpecies === 'SMALL_AND_FURRY' || rawSpecies === 'SMALL & FURRY') return 'Small & Furry';
+
+  return animal.species || 'Pet';
+}
 
 export default function PetCard({ animal, onSelect }) {
   const { user, openAuthModal } = useAuth();
@@ -25,11 +85,10 @@ export default function PetCard({ animal, onSelect }) {
 
   const name = animal.name || animal.animalName || 'Adoptable Pet';
   const breed = animal.breed || animal.animalBreed || 'Mixed Breed';
-  const species = animal.species || animal.animalSpecies || 'Pet';
+  const speciesDisplay = resolveSpeciesDisplay(animal);
   const age = animal.age || 'Adult';
   const gender = animal.gender || 'Unknown';
 
-  // Specific shelter location or shelter name fallback
   const locationDisplay =
     animal.shelterAddress ||
     animal.shelterName ||
@@ -63,7 +122,7 @@ export default function PetCard({ animal, onSelect }) {
         />
 
         <div className="absolute top-3 left-3 rounded-full bg-black/60 px-3 py-1 text-[11px] font-black text-white backdrop-blur-md">
-          {species}
+          {speciesDisplay}
         </div>
 
         {adoptionFee && (

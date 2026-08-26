@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Building2, 
   MapPin, 
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useDataCache } from '../context/DataCacheContext';
 import api from '../services/api';
 
 const SHELTER_COORDS = {
@@ -37,33 +38,50 @@ function calculateDistanceMiles(lat1, lon1, lat2, lon2) {
 export default function SheltersDirectoryPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { getCachedData, setCachedData } = useDataCache();
 
-  const [sheltersList, setSheltersList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = 'all_shelters_directory';
+  const cachedEntry = getCachedData(cacheKey);
+
+  const [sheltersList, setSheltersList] = useState(() => {
+    return cachedEntry?.data || [];
+  });
+  const [loading, setLoading] = useState(!cachedEntry);
   const [search, setSearch] = useState('');
-  const [zipCode, setZipCode] = useState(() => user?.zipCode || '25405');
-  const [radius, setRadius] = useState('50');
+  
+  // Default to user's saved ZIP if authenticated, otherwise empty
+  const [zipCode, setZipCode] = useState(() => user?.zipCode || '');
+  // Default to Any Distance (empty string)
+  const [radius, setRadius] = useState(() => (user?.zipCode ? '50' : ''));
   const [userCoords, setUserCoords] = useState(null);
   const [geoLoading, setGeoLoading] = useState(false);
 
+  // Auto-center search when a user signs in or registers with a ZIP code
   useEffect(() => {
-    if (user?.zipCode) {
+    if (user?.zipCode && user.zipCode.trim().length === 5) {
       setZipCode(user.zipCode);
+      setRadius('50');
     }
   }, [user]);
 
   const loadShelters = useCallback(async () => {
-    setLoading(true);
+    if (!cachedEntry) {
+      setLoading(true);
+    }
     try {
       const res = await api.get('/shelters');
-      setSheltersList(Array.isArray(res.data) ? res.data : []);
+      const data = Array.isArray(res.data) ? res.data : (res.data?.content || []);
+      setSheltersList(data);
+      setCachedData(cacheKey, data);
     } catch (err) {
       console.error('Failed to load /api/shelters:', err);
-      setSheltersList([]);
+      if (!cachedEntry) {
+        setSheltersList([]);
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cachedEntry, setCachedData]);
 
   useEffect(() => {
     loadShelters();
@@ -75,6 +93,7 @@ export default function SheltersDirectoryPage() {
       return;
     }
 
+    let isMounted = true;
     async function fetchUserZipCoords() {
       setGeoLoading(true);
       try {
@@ -82,68 +101,77 @@ export default function SheltersDirectoryPage() {
         if (res.ok) {
           const data = await res.json();
           const place = data.places?.[0];
-          if (place) {
+          if (place && isMounted) {
             setUserCoords({
               latitude: parseFloat(place.latitude),
               longitude: parseFloat(place.longitude),
               name: `${place['place name']}, ${place['state abbreviation']}`,
             });
           }
+        } else if (isMounted) {
+          setUserCoords(null);
         }
       } catch {
-        setUserCoords(null);
+        if (isMounted) setUserCoords(null);
       } finally {
-        setGeoLoading(false);
+        if (isMounted) setGeoLoading(false);
       }
     }
 
     fetchUserZipCoords();
+    return () => {
+      isMounted = false;
+    };
   }, [zipCode]);
 
-  const displayShelters = sheltersList
-    .map((shelter) => {
-      const coords = SHELTER_COORDS[shelter.id] || {
-        lat: parseFloat(shelter.latitude || 39.41),
-        lng: parseFloat(shelter.longitude || -77.91),
-      };
+  const displayShelters = useMemo(() => {
+    return sheltersList
+      .map((shelter) => {
+        const coords = SHELTER_COORDS[shelter.id] || {
+          lat: parseFloat(shelter.latitude || 39.41),
+          lng: parseFloat(shelter.longitude || -77.91),
+        };
 
-      let distance = null;
-      if (userCoords && coords) {
-        distance = calculateDistanceMiles(
-          userCoords.latitude,
-          userCoords.longitude,
-          coords.lat,
-          coords.lng
-        );
-      }
+        let distance = null;
+        if (userCoords && coords.lat && coords.lng) {
+          distance = calculateDistanceMiles(
+            userCoords.latitude,
+            userCoords.longitude,
+            coords.lat,
+            coords.lng
+          );
+        }
 
-      return {
-        ...shelter,
-        distance,
-      };
-    })
-    .filter((shelter) => {
-      const name = (shelter.name || '').toLowerCase();
-      const addr = (shelter.address || shelter.location || '').toLowerCase();
-      const term = search.toLowerCase();
+        return {
+          ...shelter,
+          distance,
+        };
+      })
+      .filter((shelter) => {
+        const name = (shelter.name || '').toLowerCase();
+        const addr = (shelter.address || shelter.location || '').toLowerCase();
+        const term = search.toLowerCase().trim();
 
-      const matchesSearch = name.includes(term) || addr.includes(term);
-      const withinRadius =
-        userCoords && shelter.distance !== null
-          ? shelter.distance <= parseFloat(radius)
-          : true;
+        const matchesSearch = term === '' || name.includes(term) || addr.includes(term);
+        const radiusNum = parseFloat(radius);
+        const withinRadius =
+          userCoords && shelter.distance !== null && radiusNum > 0
+            ? shelter.distance <= radiusNum
+            : true;
 
-      return matchesSearch && withinRadius;
-    })
-    .sort((a, b) => {
-      if (a.distance !== null && b.distance !== null) return a.distance - b.distance;
-      return 0;
-    });
+        return matchesSearch && withinRadius;
+      })
+      .sort((a, b) => {
+        if (a.distance !== null && b.distance !== null) return a.distance - b.distance;
+        return 0;
+      });
+  }, [sheltersList, userCoords, search, radius]);
 
   const handleReset = () => {
     setSearch('');
-    setZipCode(user?.zipCode || '25405');
-    setRadius('50');
+    setZipCode(user?.zipCode || '');
+    setRadius(user?.zipCode ? '50' : '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const inputClass =
@@ -181,7 +209,7 @@ export default function SheltersDirectoryPage() {
 
           <div className="sm:col-span-3">
             <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-              Your ZIP Code
+              ZIP Code
             </label>
             <div className="relative">
               <MapPin className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -208,11 +236,12 @@ export default function SheltersDirectoryPage() {
               onChange={(e) => setRadius(e.target.value)}
               className={inputClass}
             >
+              <option value="">Any Distance</option>
               <option value="5">Within 5 miles</option>
               <option value="15">Within 15 miles</option>
               <option value="30">Within 30 miles</option>
               <option value="50">Within 50 miles</option>
-              <option value="500">Any Distance</option>
+              <option value="100">Within 100 miles</option>
             </select>
           </div>
         </div>
@@ -222,11 +251,11 @@ export default function SheltersDirectoryPage() {
             <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
               <Navigation2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
               <span>
-                Origin: <strong className="text-slate-900 dark:text-white">{userCoords.name}</strong> ({zipCode}) &bull; Filter: <strong className="text-slate-900 dark:text-white">{radius} miles</strong>
+                Origin: <strong className="text-slate-900 dark:text-white">{userCoords.name}</strong> ({zipCode}) &bull; Filter: <strong className="text-slate-900 dark:text-white">{radius ? `${radius} miles` : 'Any Distance'}</strong>
               </span>
             </div>
           ) : (
-            <span className="text-slate-500 dark:text-slate-400">Showing all {sheltersList.length} database shelters.</span>
+            <span className="text-slate-500 dark:text-slate-400">Showing all {sheltersList.length} registered shelters.</span>
           )}
 
           <button
@@ -241,7 +270,7 @@ export default function SheltersDirectoryPage() {
       </div>
 
       {/* Shelters Grid */}
-      {loading ? (
+      {loading && sheltersList.length === 0 ? (
         <div className="flex justify-center p-12">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
         </div>
@@ -252,15 +281,13 @@ export default function SheltersDirectoryPage() {
               ? 'No shelters found in database.'
               : `No shelters found within ${radius} miles of ${userCoords?.name || zipCode}.`}
           </p>
-          {sheltersList.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setRadius('500')}
-              className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition"
-            >
-              Expand search radius
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleReset}
+            className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition cursor-pointer"
+          >
+            Clear all filters
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

@@ -1,9 +1,9 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Phone, ExternalLink, PawPrint, ChevronRight } from 'lucide-react';
+import { MapPin, Phone, ExternalLink, PawPrint, ChevronRight, Navigation2 } from 'lucide-react';
 
 const customPinIcon = L.divIcon({
   className: 'custom-map-marker',
@@ -20,24 +20,55 @@ const customPinIcon = L.divIcon({
   popupAnchor: [0, -38],
 });
 
-function MapBoundsController({ markers }) {
+const userLocationIcon = L.divIcon({
+  className: 'user-location-marker',
+  html: `
+    <div style="filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.6));">
+      <div style="width: 18px; height: 18px; background-color: #2563eb; border: 3px solid #ffffff; border-radius: 50%;"></div>
+    </div>
+  `,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+});
+
+function MapBoundsController({ markers, centerCoords, isLoading }) {
   const map = useMap();
+  const initialDone = useRef(false);
 
   useEffect(() => {
-    if (!markers || markers.length === 0) return;
+    if (isLoading) return;
 
-    if (markers.length === 1) {
-      map.setView([markers[0].lat, markers[0].lng], 12);
-    } else {
-      const bounds = L.latLngBounds(markers.map((m) => [m.lat, m.lng]));
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
+    const points = [];
+
+    if (centerCoords?.latitude && centerCoords?.longitude) {
+      points.push([centerCoords.latitude, centerCoords.longitude]);
     }
-  }, [markers, map]);
+
+    if (markers && markers.length > 0) {
+      markers.forEach((m) => points.push([m.lat, m.lng]));
+    }
+
+    if (points.length === 0) return;
+
+    if (points.length === 1) {
+      map.setView(points[0], 10, { animate: initialDone.current });
+      initialDone.current = true;
+    } else {
+      const bounds = L.latLngBounds(points);
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12, animate: initialDone.current });
+      initialDone.current = true;
+    }
+  }, [markers, centerCoords, isLoading, map]);
 
   return null;
 }
 
-export default function PetMap({ animals = [], onSelectAnimal }) {
+export default function PetMap({ 
+  animals = [], 
+  centerCoords = null, 
+  isLoading = false, 
+  onSelectAnimal 
+}) {
   const navigate = useNavigate();
 
   const activeMarkers = useMemo(() => {
@@ -73,35 +104,54 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
     return Array.from(shelterMap.values());
   }, [animals]);
 
-  const defaultCenter = [39.44026, -77.94054];
-  const centerPoint = activeMarkers.length > 0 ? [activeMarkers[0].lat, activeMarkers[0].lng] : defaultCenter;
+  const defaultCenter = [39.44026, -77.94054]; // Martinsburg, WV
+  const initialCenter = centerCoords?.latitude && centerCoords?.longitude 
+    ? [centerCoords.latitude, centerCoords.longitude]
+    : defaultCenter;
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-3xl border border-gray-200 shadow-sm dark:border-gray-800">
+    <div className="relative h-full w-full overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <MapContainer
-        center={centerPoint}
-        zoom={10}
-        scrollWheelZoom={false}
+        center={initialCenter}
+        zoom={9}
+        scrollWheelZoom={true}
         className="h-full w-full"
         style={{ minHeight: '100%', height: '100%', width: '100%' }}
       >
-        <MapBoundsController markers={activeMarkers} />
+        <MapBoundsController 
+          markers={activeMarkers} 
+          centerCoords={centerCoords}
+          isLoading={isLoading}
+        />
         
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
+        {/* User Search Origin Marker */}
+        {centerCoords?.latitude && centerCoords?.longitude && (
+          <Marker
+            position={[centerCoords.latitude, centerCoords.longitude]}
+            icon={userLocationIcon}
+          >
+            <Popup>
+              <div className="p-1 text-xs">
+                <span className="flex items-center gap-1 font-bold text-blue-600">
+                  <Navigation2 className="h-3 w-3" /> Search Origin
+                </span>
+                <p className="text-slate-600 font-semibold">{centerCoords.name}</p>
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
+        {/* Shelter Markers */}
         {activeMarkers.map((shelter) => (
           <Marker
             key={shelter.id}
             position={[shelter.lat, shelter.lng]}
             icon={customPinIcon}
-            eventHandlers={{
-              mouseover: (e) => {
-                e.target.openPopup();
-              },
-            }}
           >
             <Popup className="custom-popup">
               <div className="p-1 min-w-60">

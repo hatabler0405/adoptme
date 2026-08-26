@@ -1,27 +1,61 @@
 import React, { useState, useEffect } from 'react';
-import { X, Heart, MapPin, Check, Phone, Mail, Building2, Loader2, FileText, ExternalLink, DollarSign } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Heart, MapPin, Check, Phone, Mail, Building2, Loader2, FileText, ExternalLink, ChevronRight } from 'lucide-react';
 import { useFavorites } from '../context/FavoritesContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
-const KNOWN_SHELTERS = {
-  1: {
-    id: 1,
-    name: 'Berkeley County Humane Society',
-    address: '554 Charles Town Rd, Martinsburg, WV',
-    phoneNumber: '304-267-8389',
-    email: 'info@berkeleywvhumane.org',
-  },
-  2: {
-    id: 2,
-    name: 'Animal Welfare Society of Jefferson County',
-    address: '23 Poor Farm Rd, Kearneysville, WV',
-    phoneNumber: '304-725-0589',
-    email: 'info@awsjc.org',
-  },
-};
+function resolveSpeciesDisplay(animal) {
+  const breed = (animal.breed || animal.animalBreed || '').toLowerCase();
+  const rawSpecies = (animal.species || animal.animalSpecies || '').toUpperCase();
+
+  if (
+    breed.includes('shepherd') ||
+    breed.includes('terrier') ||
+    breed.includes('poodle') ||
+    breed.includes('retriever') ||
+    breed.includes('hound') ||
+    breed.includes('pyrenees') ||
+    breed.includes('collie') ||
+    breed.includes('sheepdog') ||
+    breed.includes('mastiff') ||
+    breed.includes('chihuahua') ||
+    breed.includes('beagle') ||
+    breed.includes('boxer') ||
+    breed.includes('husky') ||
+    breed.includes('corgi') ||
+    breed.includes('spaniel')
+  ) {
+    return 'DOG';
+  }
+
+  if (
+    breed.includes('pigeon') ||
+    breed.includes('dove') ||
+    breed.includes('parrot') ||
+    breed.includes('cockatiel') ||
+    breed.includes('parakeet') ||
+    breed.includes('finch')
+  ) {
+    return 'BIRD';
+  }
+
+  if (
+    breed.includes('shorthair') ||
+    breed.includes('longhair') ||
+    breed.includes('siamese') ||
+    breed.includes('tabby') ||
+    breed.includes('persian') ||
+    breed.includes('maine coon')
+  ) {
+    return 'CAT';
+  }
+
+  return rawSpecies || 'PET';
+}
 
 export default function PetModal({ animal, isOpen, onClose }) {
+  const navigate = useNavigate();
   const { user, openAuthModal } = useAuth();
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
 
@@ -75,7 +109,7 @@ export default function PetModal({ animal, isOpen, onClose }) {
   const petName = fullAnimal.name || fullAnimal.animalName || 'Adoptable Pet';
   const petGender = fullAnimal.gender || fullAnimal.sex || 'Unknown';
   const petBreed = fullAnimal.breed || fullAnimal.animalBreed || 'Domestic Mix';
-  const petSpecies = fullAnimal.species || fullAnimal.animalSpecies || 'Pet';
+  const petSpecies = resolveSpeciesDisplay(fullAnimal);
   const petAge = fullAnimal.age !== null && fullAnimal.age !== undefined ? `${fullAnimal.age}` : 'Unknown age';
   const petSize = fullAnimal.size || 'Medium';
 
@@ -83,23 +117,27 @@ export default function PetModal({ animal, isOpen, onClose }) {
     ? `$${Number(fullAnimal.adoptionFee).toFixed(0)}`
     : null;
 
-  const shelterId = Number(
-    fullAnimal.shelterId ||
-    fullAnimal.shelter?.id ||
-    (fullAnimal.shelterName?.includes('Berkeley') ? 1 : fullAnimal.shelterName?.includes('Jefferson') ? 2 : 1)
-  );
-  const fallback = KNOWN_SHELTERS[shelterId] || KNOWN_SHELTERS[1];
-
-  const shelterName = fullAnimal.shelterName || fullAnimal.shelter?.name || fallback.name;
+  const shelterId = fullAnimal.shelterId || fullAnimal.shelter?.id;
+  const shelterName = fullAnimal.shelterName || fullAnimal.shelter?.name || 'Partner Rescue';
   
-  const shelterAddress = 
-    fullAnimal.shelterAddress || 
-    fullAnimal.shelter?.address || 
-    fallback.address;
+  const rawAddress = fullAnimal.shelterAddress || fullAnimal.shelter?.address;
+  const shelterAddress = (rawAddress && rawAddress.trim() !== '') 
+    ? rawAddress 
+    : (fullAnimal.shelter?.zipCode ? `Postal Code: ${fullAnimal.shelter.zipCode}` : shelterName);
 
-  const shelterPhone = fullAnimal.shelterPhone || fullAnimal.shelter?.phoneNumber || fallback.phoneNumber;
-  const shelterEmail = fullAnimal.shelterEmail || fullAnimal.shelter?.email || fallback.email;
+  const shelterPhone = fullAnimal.shelterPhone || fullAnimal.shelter?.phoneNumber || fullAnimal.shelter?.phone;
+  const shelterEmail = fullAnimal.shelterEmail || fullAnimal.shelter?.email;
   const adoptionUrl = fullAnimal.adoptionUrl || fullAnimal.adoptionListingsUrl || fullAnimal.shelter?.adoptionListingsUrl || fullAnimal.shelter?.websiteUrl;
+  const shelterWebsite = fullAnimal.shelter?.websiteUrl || fullAnimal.shelter?.adoptionListingsUrl;
+
+  const handleShelterClick = () => {
+    if (shelterId) {
+      onClose();
+      navigate(`/shelters/${shelterId}`);
+    } else if (shelterWebsite) {
+      window.open(shelterWebsite, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   const goodWithKids = fullAnimal.goodWithKids ?? fullAnimal.goodWithChildren ?? null;
   const goodWithDogs = fullAnimal.goodWithDogs ?? null;
@@ -170,7 +208,7 @@ export default function PetModal({ animal, isOpen, onClose }) {
                   </div>
 
                   <p className="mt-1 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                    <MapPin className="h-3.5 w-3.5 shrink-0" />
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-blue-500" />
                     <span>{shelterAddress}</span>
                   </p>
 
@@ -252,13 +290,17 @@ export default function PetModal({ animal, isOpen, onClose }) {
               )}
             </div>
 
-            {/* Shelter Footer */}
+            {/* Clickable Shelter Footer */}
             <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-[#070d1e]">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
+              <div 
+                onClick={handleShelterClick}
+                className="flex items-center gap-2 group cursor-pointer hover:opacity-80 transition-opacity"
+              >
+                <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate max-w-50">
                   {shelterName}
                 </span>
+                <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
