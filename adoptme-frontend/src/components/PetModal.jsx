@@ -91,7 +91,12 @@ export default function PetModal({ animal, isOpen, onClose }) {
   const fallback = KNOWN_SHELTERS[shelterId] || KNOWN_SHELTERS[1];
 
   const shelterName = fullAnimal.shelterName || fullAnimal.shelter?.name || fallback.name;
-  const shelterLocation = fullAnimal.shelterAddress || fullAnimal.shelter?.address || fallback.address;
+  
+  const shelterAddress = 
+    fullAnimal.shelterAddress || 
+    fullAnimal.shelter?.address || 
+    fallback.address;
+
   const shelterPhone = fullAnimal.shelterPhone || fullAnimal.shelter?.phoneNumber || fallback.phoneNumber;
   const shelterEmail = fullAnimal.shelterEmail || fullAnimal.shelter?.email || fallback.email;
   const adoptionUrl = fullAnimal.adoptionUrl || fullAnimal.adoptionListingsUrl || fullAnimal.shelter?.adoptionListingsUrl || fullAnimal.shelter?.websiteUrl;
@@ -166,7 +171,7 @@ export default function PetModal({ animal, isOpen, onClose }) {
 
                   <p className="mt-1 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                     <MapPin className="h-3.5 w-3.5 shrink-0" />
-                    <span>{shelterLocation}</span>
+                    <span>{shelterAddress}</span>
                   </p>
 
                   {/* Badges Grid */}

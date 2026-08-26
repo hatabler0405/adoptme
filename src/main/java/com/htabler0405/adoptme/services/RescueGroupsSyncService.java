@@ -43,142 +43,180 @@ public class RescueGroupsSyncService {
 
     @Transactional
     public int syncAnimalsNearZip(String postalCode, int distanceMiles) {
-        log.info("Querying RescueGroups for animals near {} ({} mi radius)...", postalCode, distanceMiles);
+        log.info("Starting multi-page RescueGroups sync near {} ({} mi radius)...", postalCode, distanceMiles);
 
-        RescueGroupsResponseDto response = rescueGroupsRestClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/public/animals/search/available")
-                        .queryParam("include", "orgs,pictures")
-                        .queryParam("location", postalCode)
-                        .queryParam("distance", distanceMiles)
-                        .queryParam("limit", 100)
-                        .build())
-                .retrieve()
-                .body(RescueGroupsResponseDto.class);
+        int totalSaved = 0;
+        int maxPages = 10; // Ingest up to 1,000 animals (10 pages * 100)
 
-        if (response == null || response.data() == null || response.data().isEmpty()) {
-            log.warn("No animals returned from RescueGroups for zip {}", postalCode);
-            return 0;
-        }
+        for (int page = 1; page <= maxPages; page++) {
+            final int currentPage = page;
+            log.info("Fetching page {} of {} from RescueGroups...", currentPage, maxPages);
 
-        Map<String, RescueGroupsIncludedItem> includedMap = Optional.ofNullable(response.included())
-                .orElse(Collections.emptyList())
-                .stream()
-                .collect(Collectors.toMap(RescueGroupsIncludedItem::id, Function.identity(), (a, b) -> a));
+            RescueGroupsResponseDto response;
+            try {
+                response = rescueGroupsRestClient.get()
+                        .uri(uriBuilder -> uriBuilder
+                                .path("/public/animals/search/available")
+                                .queryParam("include", "orgs,pictures")
+                                .queryParam("location", postalCode)
+                                .queryParam("distance", distanceMiles)
+                                .queryParam("limit", 100)
+                                .queryParam("page", currentPage)
+                                .build())
+                        .retrieve()
+                        .body(RescueGroupsResponseDto.class);
+            } catch (Exception e) {
+                log.error("Failed to query RescueGroups page {}: {}", currentPage, e.getMessage());
+                break;
+            }
 
-        Map<String, Shelter> shelterCache = new HashMap<>();
+            if (response == null || response.data() == null || response.data().isEmpty()) {
+                log.info("No more animals found at page {}. Ending sync.", currentPage);
+                break;
+            }
 
-        for (RescueGroupsIncludedItem item : includedMap.values()) {
-            if ("orgs".equalsIgnoreCase(item.type()) || "organizations".equalsIgnoreCase(item.type())) {
+            Map<String, RescueGroupsIncludedItem> includedMap = Optional.ofNullable(response.included())
+                    .orElse(Collections.emptyList())
+                    .stream()
+                    .collect(Collectors.toMap(RescueGroupsIncludedItem::id, Function.identity(), (a, b) -> a));
+
+            Map<String, Shelter> shelterCache = new HashMap<>();
+
+            for (RescueGroupsIncludedItem item : includedMap.values()) {
+                if ("orgs".equalsIgnoreCase(item.type()) || "organizations".equalsIgnoreCase(item.type())) {
+                    try {
+                        Long orgId = Long.parseLong(item.id());
+                        Shelter shelter = shelterRepository.findByRescuegroupsOrgId(orgId)
+                                .orElseGet(() -> {
+                                    Shelter s = new Shelter();
+                                    s.setRescuegroupsOrgId(orgId);
+                                    s.setSourcetype(SourceType.SHELTER);
+                                    return s;
+                                });
+
+                        var attr = item.attributes();
+                        shelter.setName(attr.name() != null ? attr.name() : "Rescue Partner");
+                        shelter.setEmail(attr.email());
+                        shelter.setPhoneNumber(attr.phone());
+
+                        String street = attr.street() != null ? attr.street().trim() : "";
+                        String city = attr.city() != null ? attr.city().trim() : "";
+                        String state = attr.state() != null ? attr.state().trim() : "";
+                        String zip = attr.postalcode() != null ? attr.postalcode().trim() : postalCode;
+
+                        StringBuilder addressBuilder = new StringBuilder();
+                        if (!street.isEmpty()) addressBuilder.append(street).append(", ");
+                        if (!city.isEmpty()) addressBuilder.append(city).append(", ");
+                        if (!state.isEmpty()) addressBuilder.append(state).append(" ");
+                        if (!zip.isEmpty()) addressBuilder.append(zip);
+
+                        String finalAddress = addressBuilder.toString().trim();
+                        shelter.setAddress(!finalAddress.isEmpty() ? finalAddress : (city.isEmpty() ? "Regional Foster Network" : city + ", " + state));
+                        shelter.setZipCode(zip);
+                        shelter.setWebsiteUrl(attr.url());
+                        shelter.setAdoptionListingsUrl(attr.url());
+
+                        if (attr.lat() != null && attr.lon() != null) {
+                            double lat = attr.lat();
+                            double lon = attr.lon();
+                            double realLat = (Math.abs(lat) <= 90.0) ? lat : lon;
+                            double realLon = (Math.abs(lon) > 90.0 || lon < 0) ? lon : lat;
+                            shelter.setLocation(geometryFactory.createPoint(new Coordinate(realLon, realLat)));
+                        }
+
+                        shelterCache.put(item.id(), shelterRepository.save(shelter));
+                    } catch (Exception e) {
+                        log.error("Failed to persist shelter org ID {}: {}", item.id(), e.getMessage());
+                    }
+                }
+            }
+
+            int pageSaved = 0;
+            for (RescueGroupsAnimalData animalData : response.data()) {
                 try {
-                    Long orgId = Long.parseLong(item.id());
-                    Shelter shelter = shelterRepository.findByRescuegroupsOrgId(orgId)
+                    Long petId = Long.parseLong(animalData.id());
+                    var attr = animalData.attributes();
+
+                    AnimalProfile profile = animalRepository.findByRescuegroupsPetId(petId)
                             .orElseGet(() -> {
-                                Shelter s = new Shelter();
-                                s.setRescuegroupsOrgId(orgId);
-                                s.setSourcetype(SourceType.SHELTER);
-                                return s;
+                                AnimalProfile p = new AnimalProfile();
+                                p.setRescuegroupsPetId(petId);
+                                p.setSourceUrl("https://rescuegroups.org/pet/" + petId);
+                                return p;
                             });
 
-                    var attr = item.attributes();
-                    shelter.setName(attr.name() != null ? attr.name() : "Rescue Partner");
-                    shelter.setEmail(attr.email());
-                    shelter.setPhoneNumber(attr.phone());
-                    shelter.setAddress(attr.street() != null ? attr.street() : "");
-                    shelter.setZipCode(attr.postalcode() != null ? attr.postalcode() : postalCode);
-                    shelter.setWebsiteUrl(attr.url());
-                    shelter.setAdoptionListingsUrl(attr.url());
-
-                    if (attr.lat() != null && attr.lon() != null) {
-                        double lat = attr.lat();
-                        double lon = attr.lon();
-                        double realLat = (Math.abs(lat) <= 90.0) ? lat : lon;
-                        double realLon = (Math.abs(lon) > 90.0 || lon < 0) ? lon : lat;
-                        shelter.setLocation(geometryFactory.createPoint(new Coordinate(realLon, realLat)));
+                    Shelter shelter = null;
+                    if (animalData.relationships() != null &&
+                        animalData.relationships().orgs() != null &&
+                        !animalData.relationships().orgs().data().isEmpty()) {
+                        String orgId = animalData.relationships().orgs().data().get(0).id();
+                        shelter = shelterCache.get(orgId);
                     }
 
-                    shelterCache.put(item.id(), shelterRepository.save(shelter));
+                    if (shelter == null) {
+                        continue;
+                    }
+
+                    profile.setShelter(shelter);
+                    profile.setName(attr.name() != null ? attr.name() : "Adoptable Pet");
+                    profile.setBreed(attr.breedString() != null ? attr.breedString() : (attr.breedPrimary() != null ? attr.breedPrimary() : "Mixed Breed"));
+                    profile.setSpecies(detectSpecies(attr.species(), profile.getBreed()));
+                    profile.setGender(attr.sex() != null ? attr.sex().toUpperCase() : "UNKNOWN");
+                    profile.setAge(attr.ageGroup() != null ? attr.ageGroup() : (attr.ageString() != null ? attr.ageString() : "Adult"));
+                    profile.setSize(attr.sizeGroup() != null ? attr.sizeGroup() : "Medium");
+                    profile.setDescription(attr.descriptionText() != null ? attr.descriptionText() : attr.descriptionHtml());
+                    profile.setStatus("AVAILABLE");
+                    profile.setHypoallergenic(Boolean.TRUE.equals(attr.hypoallergenic()));
+                    profile.setGoodWithKids(attr.goodWithKids());
+                    profile.setGoodWithDogs(attr.goodWithDogs());
+                    profile.setGoodWithCats(attr.goodWithCats());
+                    profile.setLastSeenAt(LocalDateTime.now());
+
+                    if (attr.adoptionFeeString() != null) {
+                        try {
+                            String cleanPrice = attr.adoptionFeeString().replaceAll("[^0-9.]", "");
+                            if (!cleanPrice.isEmpty()) {
+                                profile.setAdoptionFee(new BigDecimal(cleanPrice));
+                            }
+                        } catch (Exception ignored) {}
+                    }
+
+                    if (animalData.relationships() != null &&
+                        animalData.relationships().pictures() != null &&
+                        !animalData.relationships().pictures().data().isEmpty()) {
+                        String picId = animalData.relationships().pictures().data().get(0).id();
+                        RescueGroupsIncludedItem picItem = includedMap.get(picId);
+                        if (picItem != null && picItem.attributes() != null) {
+                            String imgUrl = extractPictureUrl(picItem.attributes());
+                            if (imgUrl != null) {
+                                profile.setImageUrl(imgUrl);
+                            }
+                        }
+                    }
+
+                    animalRepository.save(profile);
+                    pageSaved++;
                 } catch (Exception e) {
-                    log.error("Failed to persist shelter org ID {}: {}", item.id(), e.getMessage());
+                    log.error("Failed to sync animal ID {}: {}", animalData.id(), e.getMessage());
                 }
             }
-        }
 
-        int savedAnimals = 0;
-        for (RescueGroupsAnimalData animalData : response.data()) {
+            totalSaved += pageSaved;
+
+            if (response.data().size() < 100) {
+                log.info("Reached end of available records on page {}.", currentPage);
+                break;
+            }
+
             try {
-                Long petId = Long.parseLong(animalData.id());
-                var attr = animalData.attributes();
-
-                AnimalProfile profile = animalRepository.findByRescuegroupsPetId(petId)
-                        .orElseGet(() -> {
-                            AnimalProfile p = new AnimalProfile();
-                            p.setRescuegroupsPetId(petId);
-                            p.setSourceUrl("https://rescuegroups.org/pet/" + petId);
-                            return p;
-                        });
-
-                Shelter shelter = null;
-                if (animalData.relationships() != null &&
-                    animalData.relationships().orgs() != null &&
-                    !animalData.relationships().orgs().data().isEmpty()) {
-                    String orgId = animalData.relationships().orgs().data().get(0).id();
-                    shelter = shelterCache.get(orgId);
-                }
-
-                if (shelter == null) {
-                    continue;
-                }
-
-                profile.setShelter(shelter);
-                profile.setName(attr.name() != null ? attr.name() : "Adoptable Pet");
-                profile.setBreed(attr.breedString() != null ? attr.breedString() : (attr.breedPrimary() != null ? attr.breedPrimary() : "Mixed Breed"));
-
-                // Accurate species detection from raw API species + broad breed matching
-                profile.setSpecies(detectSpecies(attr.species(), profile.getBreed()));
-
-                profile.setGender(attr.sex() != null ? attr.sex().toUpperCase() : "UNKNOWN");
-                profile.setAge(attr.ageGroup() != null ? attr.ageGroup() : (attr.ageString() != null ? attr.ageString() : "Adult"));
-                profile.setSize(attr.sizeGroup() != null ? attr.sizeGroup() : "Medium");
-                profile.setDescription(attr.descriptionText() != null ? attr.descriptionText() : attr.descriptionHtml());
-                profile.setStatus("AVAILABLE");
-                profile.setHypoallergenic(Boolean.TRUE.equals(attr.hypoallergenic()));
-                profile.setGoodWithKids(attr.goodWithKids());
-                profile.setGoodWithDogs(attr.goodWithDogs());
-                profile.setGoodWithCats(attr.goodWithCats());
-                profile.setLastSeenAt(LocalDateTime.now());
-
-                if (attr.adoptionFeeString() != null) {
-                    try {
-                        String cleanPrice = attr.adoptionFeeString().replaceAll("[^0-9.]", "");
-                        if (!cleanPrice.isEmpty()) {
-                            profile.setAdoptionFee(new BigDecimal(cleanPrice));
-                        }
-                    } catch (Exception ignored) {}
-                }
-
-                if (animalData.relationships() != null &&
-                    animalData.relationships().pictures() != null &&
-                    !animalData.relationships().pictures().data().isEmpty()) {
-                    String picId = animalData.relationships().pictures().data().get(0).id();
-                    RescueGroupsIncludedItem picItem = includedMap.get(picId);
-                    if (picItem != null && picItem.attributes() != null) {
-                        String imgUrl = extractPictureUrl(picItem.attributes());
-                        if (imgUrl != null) {
-                            profile.setImageUrl(imgUrl);
-                        }
-                    }
-                }
-
-                animalRepository.save(profile);
-                savedAnimals++;
-            } catch (Exception e) {
-                log.error("Failed to sync animal ID {}: {}", animalData.id(), e.getMessage());
+                Thread.sleep(200);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
             }
         }
 
-        log.info("Sync complete: saved {} animals from RescueGroups.", savedAnimals);
-        return savedAnimals;
+        log.info("Multi-page sync complete: saved/updated a total of {} animals.", totalSaved);
+        return totalSaved;
     }
 
     private String detectSpecies(String rawSpecies, String breed) {
