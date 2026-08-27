@@ -43,12 +43,21 @@ function resolveSpeciesDisplay(animal) {
   // Guard against cats
   if (
     breed.includes('shorthair') ||
+    breed.includes('short hair') ||
     breed.includes('longhair') ||
+    breed.includes('long hair') ||
     breed.includes('siamese') ||
     breed.includes('tabby') ||
     breed.includes('persian') ||
-    breed.includes('maine coon')
-  ) {
+    breed.includes('maine coon') ||
+    breed.includes('tortoiseshell') ||
+    breed.includes('tuxedo') ||
+    breed.includes('calico') ||
+    breed.includes('domestic')||
+    breed.includes('Domestic Short Hair (short coat)') ||
+    breed.includes('Bombay (medium coat)')
+  )
+  {
     return 'Cat';
   }
 
