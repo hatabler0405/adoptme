@@ -4,6 +4,7 @@ import com.htabler0405.adoptme.dto.AnimalResponseDto;
 import com.htabler0405.adoptme.dto.CreateUserRequest;
 import com.htabler0405.adoptme.dto.UpdatePasswordRequest;
 import com.htabler0405.adoptme.dto.UpdateUsernameRequest;
+import com.htabler0405.adoptme.services.RecommendationService;
 import com.htabler0405.adoptme.services.FavoriteAnimalService;
 import com.htabler0405.adoptme.services.UserAccountOptionsService;
 import org.springframework.http.HttpStatus;
@@ -20,10 +21,14 @@ public class UserController {
 
     private final UserAccountOptionsService accountOptionsService;
     private final FavoriteAnimalService favoriteService;
+    private final RecommendationService recommendationService;
 
-    public UserController(UserAccountOptionsService accountOptionsService, FavoriteAnimalService favoriteService) {
+    public UserController(UserAccountOptionsService accountOptionsService, 
+                          FavoriteAnimalService favoriteService,
+                          RecommendationService recommendationService) {
         this.accountOptionsService = accountOptionsService;
         this.favoriteService = favoriteService;
+        this.recommendationService = recommendationService;
     }
 
     @PostMapping("/create")
@@ -94,5 +99,11 @@ public class UserController {
         Long userId = Long.parseLong(principal.getName());
         List<AnimalResponseDto> favorites = favoriteService.getUserFavoriteAnimal(userId);
         return ResponseEntity.ok(favorites);
+    }
+    @GetMapping("/recommendations")
+    public ResponseEntity<List<AnimalResponseDto>> getRecommendations(Principal principal) {
+        Long userId = Long.parseLong(principal.getName());
+        List<AnimalResponseDto> recommendations = recommendationService.getUserRecommendations(userId);
+        return ResponseEntity.ok(recommendations);
     }
 }

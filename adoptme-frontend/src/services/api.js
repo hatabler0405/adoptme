@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'; 
-//'https://adoptme-api-m0ei.onrender.com/api'; 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://adoptme-api-m0ei.onrender.com/api'; 
+//'http://localhost:8080/api'; 
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -68,7 +68,13 @@ export const userService = {
   deleteAccount: async () => {
     return api.delete('/users');
   },
+
+  getRecommendations: async () => {
+    const response = await api.get('/users/recommendations');
+    return response.data;
+  },
 };
+
 
 export const animalService = {
   searchAnimals: async (filterParams = {}, page = 0, size = 16) => {

@@ -200,6 +200,40 @@ export function FavoritesProvider({ children }) {
 }
 
 export const useFavorites = () => useContext(FavoritesContext);
+=== FILE: src/context/DataCacheContext.jsx ===
+import React, { createContext, useContext, useRef } from 'react';
+
+const DataCacheContext = createContext(null);
+
+export function DataCacheProvider({ children }) {
+  // Store cached responses in memory keyed by query/endpoint signature
+  const cacheRef = useRef(new Map());
+
+  const getCachedData = (key) => {
+    return cacheRef.current.get(key) || null;
+  };
+
+  const setCachedData = (key, data) => {
+    cacheRef.current.set(key, {
+      data,
+      timestamp: Date.now(),
+    });
+  };
+
+  return (
+    <DataCacheContext.Provider value={{ getCachedData, setCachedData }}>
+      {children}
+    </DataCacheContext.Provider>
+  );
+}
+
+export function useDataCache() {
+  const context = useContext(DataCacheContext);
+  if (!context) {
+    throw new Error('useDataCache must be used within a DataCacheProvider');
+  }
+  return context;
+}
 === FILE: src/App.css ===
 .counter {
   font-size: 16px;
@@ -668,111 +702,170 @@ export default function ShelterReviews({ shelterId, shelterName }) {
 }
 === FILE: src/components/PetCard.jsx ===
 import React from 'react';
-import { Heart, MapPin, Check } from 'lucide-react';
+import { Heart, MapPin } from 'lucide-react';
 import { useFavorites } from '../context/FavoritesContext';
 import { useAuth } from '../context/AuthContext';
+
+function resolveSpeciesDisplay(animal) {
+  const breed = (animal.breed || animal.animalBreed || '').toLowerCase();
+  const rawSpecies = (animal.species || animal.animalSpecies || '').toUpperCase();
+
+  // Guard against dogs misclassified as Rabbit, Horse, Small & Furry, etc.
+  if (
+    breed.includes('shepherd') ||
+    breed.includes('terrier') ||
+    breed.includes('poodle') ||
+    breed.includes('retriever') ||
+    breed.includes('hound') ||
+    breed.includes('pyrenees') ||
+    breed.includes('collie') ||
+    breed.includes('sheepdog') ||
+    breed.includes('mastiff') ||
+    breed.includes('chihuahua') ||
+    breed.includes('beagle') ||
+    breed.includes('boxer') ||
+    breed.includes('husky') ||
+    breed.includes('corgi') ||
+    breed.includes('spaniel')
+  ) {
+    return 'Dog';
+  }
+
+  // Guard against birds misclassified as Horse
+  if (
+    breed.includes('pigeon') ||
+    breed.includes('dove') ||
+    breed.includes('parrot') ||
+    breed.includes('cockatiel') ||
+    breed.includes('parakeet') ||
+    breed.includes('finch')
+  ) {
+    return 'Bird';
+  }
+
+  // Guard against cats
+  if (
+    breed.includes('shorthair') ||
+    breed.includes('longhair') ||
+    breed.includes('siamese') ||
+    breed.includes('tabby') ||
+    breed.includes('persian') ||
+    breed.includes('maine coon')
+  ) {
+    return 'Cat';
+  }
+
+  // Format capitalized output
+  if (rawSpecies === 'DOG') return 'Dog';
+  if (rawSpecies === 'CAT') return 'Cat';
+  if (rawSpecies === 'BIRD') return 'Bird';
+  if (rawSpecies === 'RABBIT') return 'Rabbit';
+  if (rawSpecies === 'HORSE') return 'Horse';
+  if (rawSpecies === 'SMALL_AND_FURRY' || rawSpecies === 'SMALL & FURRY') return 'Small & Furry';
+
+  return animal.species || 'Pet';
+}
 
 export default function PetCard({ animal, onSelect }) {
   const { user, openAuthModal } = useAuth();
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
 
-  const favorited = isFavorite(animal.id);
+  const petId = animal.id || animal.animalId;
+  const favorited = isFavorite(petId);
 
-  const handleFavorite = (e) => {
+  const handleFavoriteClick = (e) => {
     e.stopPropagation();
     if (!user) {
       openAuthModal();
       return;
     }
     if (favorited) {
-      removeFavorite(animal.id);
+      removeFavorite(petId);
     } else {
       addFavorite(animal);
     }
   };
 
-  // Helper to format age
-  const displayAge = typeof animal.age === 'number' ? `${animal.age} yrs` : (animal.age || 'Age unknown');
+  const name = animal.name || animal.animalName || 'Adoptable Pet';
+  const breed = animal.breed || animal.animalBreed || 'Mixed Breed';
+  const speciesDisplay = resolveSpeciesDisplay(animal);
+  const age = animal.age || 'Adult';
+  const gender = animal.gender || 'Unknown';
 
-  // Parse compatibility from booleans or description text
-  const desc = animal.description || '';
-  const goodWithKids = animal.goodWithKids ?? desc.toLowerCase().includes('kid friendly: yes');
-  const goodWithDogs = animal.goodWithDogs ?? desc.toLowerCase().includes('dog friendly: yes');
-  const goodWithCats = animal.goodWithCats ?? desc.toLowerCase().includes('cat friendly: yes');
+  const locationDisplay =
+    animal.shelterAddress ||
+    animal.shelterName ||
+    animal.shelter?.name ||
+    'Regional Foster Network';
+
+  const adoptionFee =
+    animal.adoptionFee !== null && animal.adoptionFee !== undefined
+      ? `$${Number(animal.adoptionFee).toFixed(0)}`
+      : null;
 
   return (
     <div
       onClick={onSelect}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 cursor-pointer"
+      className="group relative flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl dark:border-slate-800 dark:bg-[#0b1329] cursor-pointer"
     >
-      {/* Image Container */}
-      <div className="relative aspect-4/3 w-full overflow-hidden bg-gray-100 dark:bg-gray-800">
+      <div className="relative aspect-4/3 w-full overflow-hidden bg-slate-100 dark:bg-slate-900">
         <img
           src={
             animal.imageUrl ||
             animal.photoUrl ||
             'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=600&auto=format&fit=crop&q=80'
           }
-          alt={animal.name}
+          alt={name}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          onError={(e) => {
+            e.target.onerror = null;
+            e.target.src =
+              'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=600&auto=format&fit=crop&q=80';
+          }}
         />
+
+        <div className="absolute top-3 left-3 rounded-full bg-black/60 px-3 py-1 text-[11px] font-black text-white backdrop-blur-md">
+          {speciesDisplay}
+        </div>
+
+        {adoptionFee && (
+          <div className="absolute bottom-3 left-3 rounded-full bg-emerald-600/90 px-2.5 py-0.5 text-[11px] font-black text-white backdrop-blur-md shadow-sm">
+            {adoptionFee} Fee
+          </div>
+        )}
+
         <button
           type="button"
-          onClick={handleFavorite}
-          className={`absolute top-3 right-3 rounded-full p-2.5 backdrop-blur-md transition-transform active:scale-90 ${
+          onClick={handleFavoriteClick}
+          className={`absolute top-3 right-3 rounded-full p-2.5 backdrop-blur-md transition-transform active:scale-90 cursor-pointer ${
             favorited
               ? 'bg-rose-500 text-white shadow-md'
-              : 'bg-black/30 text-white hover:bg-black/50'
+              : 'bg-black/40 text-white hover:bg-black/60'
           }`}
-          aria-label="Favorite"
         >
           <Heart className={`h-4 w-4 ${favorited ? 'fill-current' : ''}`} />
         </button>
-        <div className="absolute bottom-2 left-2 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-md">
-          {animal.species || 'Pet'}
-        </div>
       </div>
 
-      {/* Info Section */}
-      <div className="flex flex-1 flex-col p-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">
-            {animal.name}
-          </h3>
-          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 capitalize">
-            {animal.gender ? animal.gender.toLowerCase() : ''}
-          </span>
+      <div className="flex flex-1 flex-col justify-between p-4">
+        <div>
+          <div className="flex items-center justify-between">
+            <h3 className="truncate text-lg font-black text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">
+              {name}
+            </h3>
+            <span className="text-xs font-bold text-slate-500 capitalize">
+              {gender.toLowerCase()}
+            </span>
+          </div>
+
+          <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
+            {breed} &bull; {age}
+          </p>
         </div>
 
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
-          {animal.breed || 'Mixed Breed'} &bull; {displayAge}
-          {animal.weight ? ` • ${animal.weight} lbs` : ''}
-        </p>
-
-        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-          <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-          <span className="truncate">
-            {animal.shelterName || animal.shelter?.name || animal.location || 'Local Shelter'}
-          </span>
-        </p>
-
-        {/* Compatibility Pills */}
-        <div className="mt-3 flex flex-wrap gap-1.5 pt-3 border-t border-gray-100 dark:border-gray-800">
-          {goodWithKids && (
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-              <Check className="h-2.5 w-2.5" /> Kids
-            </span>
-          )}
-          {goodWithDogs && (
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-              <Check className="h-2.5 w-2.5" /> Dogs
-            </span>
-          )}
-          {goodWithCats && (
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-              <Check className="h-2.5 w-2.5" /> Cats
-            </span>
-          )}
+        <div className="mt-3 flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/80 pt-2.5">
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+          <span className="truncate">{locationDisplay}</span>
         </div>
       </div>
     </div>
@@ -780,29 +873,63 @@ export default function PetCard({ animal, onSelect }) {
 }
 === FILE: src/components/PetModal.jsx ===
 import React, { useState, useEffect } from 'react';
-import { X, Heart, MapPin, Check, Phone, Mail, Building2, Loader2, FileText, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Heart, MapPin, Check, Phone, Mail, Building2, Loader2, FileText, ExternalLink, ChevronRight } from 'lucide-react';
 import { useFavorites } from '../context/FavoritesContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
-const KNOWN_SHELTERS = {
-  1: {
-    id: 1,
-    name: 'Berkeley County Humane Society',
-    address: '554 Charles Town Rd, Martinsburg, WV',
-    phoneNumber: '304-267-8389',
-    email: 'info@berkeleywvhumane.org',
-  },
-  2: {
-    id: 2,
-    name: 'Animal Welfare Society of Jefferson County',
-    address: '23 Poor Farm Rd, Kearneysville, WV',
-    phoneNumber: '304-725-0589',
-    email: 'info@awsjc.org',
-  },
-};
+function resolveSpeciesDisplay(animal) {
+  const breed = (animal.breed || animal.animalBreed || '').toLowerCase();
+  const rawSpecies = (animal.species || animal.animalSpecies || '').toUpperCase();
+
+  if (
+    breed.includes('shepherd') ||
+    breed.includes('terrier') ||
+    breed.includes('poodle') ||
+    breed.includes('retriever') ||
+    breed.includes('hound') ||
+    breed.includes('pyrenees') ||
+    breed.includes('collie') ||
+    breed.includes('sheepdog') ||
+    breed.includes('mastiff') ||
+    breed.includes('chihuahua') ||
+    breed.includes('beagle') ||
+    breed.includes('boxer') ||
+    breed.includes('husky') ||
+    breed.includes('corgi') ||
+    breed.includes('spaniel')
+  ) {
+    return 'DOG';
+  }
+
+  if (
+    breed.includes('pigeon') ||
+    breed.includes('dove') ||
+    breed.includes('parrot') ||
+    breed.includes('cockatiel') ||
+    breed.includes('parakeet') ||
+    breed.includes('finch')
+  ) {
+    return 'BIRD';
+  }
+
+  if (
+    breed.includes('shorthair') ||
+    breed.includes('longhair') ||
+    breed.includes('siamese') ||
+    breed.includes('tabby') ||
+    breed.includes('persian') ||
+    breed.includes('maine coon')
+  ) {
+    return 'CAT';
+  }
+
+  return rawSpecies || 'PET';
+}
 
 export default function PetModal({ animal, isOpen, onClose }) {
+  const navigate = useNavigate();
   const { user, openAuthModal } = useAuth();
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
 
@@ -815,12 +942,10 @@ export default function PetModal({ animal, isOpen, onClose }) {
       return;
     }
 
-    // Unwrap if favorite entity returns animal nested under .animal
     const rawPet = animal.animal || animal;
     setFullAnimal(rawPet);
 
     const petId = rawPet.id || rawPet.animalId;
-    // Fetch full data if description or specific metadata is missing
     if (petId && (!rawPet.description || !rawPet.breed)) {
       setLoading(true);
       api.get(`/animals/${petId}`)
@@ -855,35 +980,44 @@ export default function PetModal({ animal, isOpen, onClose }) {
     }
   };
 
-  // Field normalization
   const petName = fullAnimal.name || fullAnimal.animalName || 'Adoptable Pet';
   const petGender = fullAnimal.gender || fullAnimal.sex || 'Unknown';
   const petBreed = fullAnimal.breed || fullAnimal.animalBreed || 'Domestic Mix';
-  const petSpecies = fullAnimal.species || fullAnimal.animalSpecies || 'Pet';
-  const petAge = fullAnimal.age !== null && fullAnimal.age !== undefined ? `${fullAnimal.age} yrs` : 'Unknown age';
-  const petWeight = fullAnimal.weight
-    ? (typeof fullAnimal.weight === 'number' ? `${fullAnimal.weight} lbs` : fullAnimal.weight)
+  const petSpecies = resolveSpeciesDisplay(fullAnimal);
+  const petAge = fullAnimal.age !== null && fullAnimal.age !== undefined ? `${fullAnimal.age}` : 'Unknown age';
+  const petSize = fullAnimal.size || 'Medium';
+
+  const adoptionFee = fullAnimal.adoptionFee !== null && fullAnimal.adoptionFee !== undefined
+    ? `$${Number(fullAnimal.adoptionFee).toFixed(0)}`
     : null;
 
-  // Shelter normalization with fallback
-  const shelterId = Number(
-    fullAnimal.shelterId ||
-    fullAnimal.shelter?.id ||
-    (fullAnimal.shelterName?.includes('Berkeley') ? 1 : fullAnimal.shelterName?.includes('Jefferson') ? 2 : 1)
-  );
-  const fallback = KNOWN_SHELTERS[shelterId] || KNOWN_SHELTERS[1];
+  const shelterId = fullAnimal.shelterId || fullAnimal.shelter?.id;
+  const shelterName = fullAnimal.shelterName || fullAnimal.shelter?.name || 'Partner Rescue';
+  
+  const rawAddress = fullAnimal.shelterAddress || fullAnimal.shelter?.address;
+  const shelterAddress = (rawAddress && rawAddress.trim() !== '') 
+    ? rawAddress 
+    : (fullAnimal.shelter?.zipCode ? `Postal Code: ${fullAnimal.shelter.zipCode}` : shelterName);
 
-  const shelterName = fullAnimal.shelterName || fullAnimal.shelter?.name || fallback.name;
-  const shelterLocation = fullAnimal.shelterAddress || fullAnimal.location || fullAnimal.shelter?.location || fullAnimal.shelter?.address || fallback.address;
-  const shelterPhone = fullAnimal.shelterPhone || fullAnimal.shelter?.phoneNumber || fullAnimal.shelter?.phone || fallback.phoneNumber;
-  const shelterEmail = fullAnimal.shelterEmail || fullAnimal.shelter?.email || fallback.email;
-  const adoptionUrl = fullAnimal.adoptionUrl || fullAnimal.adoptionListingsUrl || fullAnimal.shelter?.adoptionListingsUrl;
+  const shelterPhone = fullAnimal.shelterPhone || fullAnimal.shelter?.phoneNumber || fullAnimal.shelter?.phone;
+  const shelterEmail = fullAnimal.shelterEmail || fullAnimal.shelter?.email;
+  const adoptionUrl = fullAnimal.adoptionUrl || fullAnimal.adoptionListingsUrl || fullAnimal.shelter?.adoptionListingsUrl || fullAnimal.shelter?.websiteUrl;
+  const shelterWebsite = fullAnimal.shelter?.websiteUrl || fullAnimal.shelter?.adoptionListingsUrl;
+
+  const handleShelterClick = () => {
+    if (shelterId) {
+      onClose();
+      navigate(`/shelters/${shelterId}`);
+    } else if (shelterWebsite) {
+      window.open(shelterWebsite, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   const goodWithKids = fullAnimal.goodWithKids ?? fullAnimal.goodWithChildren ?? null;
   const goodWithDogs = fullAnimal.goodWithDogs ?? null;
   const goodWithCats = fullAnimal.goodWithCats ?? null;
 
-  const description = fullAnimal.description || `${petName} is an active, loving companion waiting for a forever home. Up to date on vaccinations and ready for adoption.`;
+  const description = fullAnimal.description || `${petName} is an active, loving companion looking for a forever home. Vaccinated and ready for adoption.`;
 
   return (
     <div 
@@ -894,7 +1028,6 @@ export default function PetModal({ animal, isOpen, onClose }) {
         className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-[#0b1329] sm:p-8 transition-colors"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
         <button
           type="button"
           onClick={onClose}
@@ -910,13 +1043,12 @@ export default function PetModal({ animal, isOpen, onClose }) {
         ) : (
           <>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              {/* Photo */}
+              {/* Photo & Favorite Action */}
               <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900">
                 <img
                   src={
                     fullAnimal.imageUrl ||
                     fullAnimal.photoUrl ||
-                    fullAnimal.image ||
                     'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=600&auto=format&fit=crop&q=80'
                   }
                   alt={petName}
@@ -937,7 +1069,7 @@ export default function PetModal({ animal, isOpen, onClose }) {
                 </button>
               </div>
 
-              {/* Details & Attributes */}
+              {/* Attributes & Key Details */}
               <div className="flex flex-col justify-between space-y-4">
                 <div>
                   <div className="flex items-center justify-between pr-8">
@@ -950,8 +1082,8 @@ export default function PetModal({ animal, isOpen, onClose }) {
                   </div>
 
                   <p className="mt-1 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                    <MapPin className="h-3.5 w-3.5 shrink-0" />
-                    <span>{shelterLocation}</span>
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                    <span>{shelterAddress}</span>
                   </p>
 
                   {/* Badges Grid */}
@@ -964,12 +1096,14 @@ export default function PetModal({ animal, isOpen, onClose }) {
                       <span className="text-[10px] text-slate-400 font-bold uppercase block">Age / Gender</span>
                       <span className="font-bold text-slate-800 dark:text-slate-200 block">{petAge} &bull; {petGender}</span>
                     </div>
-                    {petWeight && (
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-900/60 col-span-2">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Weight</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200 block">{petWeight}</span>
-                      </div>
-                    )}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-900/60">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Size</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 block">{petSize}</span>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 dark:border-emerald-900/40 dark:bg-emerald-950/30">
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase block">Adoption Fee</span>
+                      <span className="font-black text-emerald-700 dark:text-emerald-300 block">{adoptionFee || 'Inquire'}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -1005,38 +1139,42 @@ export default function PetModal({ animal, isOpen, onClose }) {
             {/* Description */}
             <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">About {petName}</h3>
-              <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+              <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 line-clamp-6">
                 {description}
               </p>
             </div>
 
-            {/* Adoption Application Call-To-Action Banner */}
+            {/* Application CTA */}
             <div className="mt-6">
               {adoptionUrl ? (
                 <a
                   href={adoptionUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-700 transition cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-700 transition cursor-pointer"
                 >
                   <FileText className="h-4 w-4" />
-                  <span>Adoption Application Form</span>
+                  <span>Submit Adoption Application</span>
                   <ExternalLink className="h-4 w-4 opacity-80" />
                 </a>
               ) : (
                 <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
-                  Sorry, we don't have the link for the application form at this time.
+                  Adoption application link available through direct shelter contact below.
                 </div>
               )}
             </div>
 
-            {/* Shelter Footer & Contact */}
+            {/* Clickable Shelter Footer */}
             <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-[#070d1e]">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                  Hosted by: {shelterName}
+              <div 
+                onClick={handleShelterClick}
+                className="flex items-center gap-2 group cursor-pointer hover:opacity-80 transition-opacity"
+              >
+                <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate max-w-50">
+                  {shelterName}
                 </span>
+                <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1161,14 +1299,13 @@ export default function Navbar() {
   );
 }
 === FILE: src/components/PetMap.jsx ===
-import React, { useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import React, { useMemo, useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Phone, ExternalLink, PawPrint, ChevronRight } from 'lucide-react';
+import { MapPin, Phone, ExternalLink, PawPrint, ChevronRight, Navigation2 } from 'lucide-react';
 
-// Exact SVG Pin with zero rotation distortion — needle tip anchored at [16, 38]
 const customPinIcon = L.divIcon({
   className: 'custom-map-marker',
   html: `
@@ -1180,14 +1317,61 @@ const customPinIcon = L.divIcon({
     </div>
   `,
   iconSize: [32, 38],
-  iconAnchor: [16, 38], // Places the needle tip on the exact GPS coordinate
+  iconAnchor: [16, 38],
   popupAnchor: [0, -38],
 });
 
-export default function PetMap({ animals = [], onSelectAnimal }) {
+const userLocationIcon = L.divIcon({
+  className: 'user-location-marker',
+  html: `
+    <div style="filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.6));">
+      <div style="width: 18px; height: 18px; background-color: #2563eb; border: 3px solid #ffffff; border-radius: 50%;"></div>
+    </div>
+  `,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+});
+
+function MapBoundsController({ markers, centerCoords, isLoading }) {
+  const map = useMap();
+  const initialDone = useRef(false);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const points = [];
+
+    if (centerCoords?.latitude && centerCoords?.longitude) {
+      points.push([centerCoords.latitude, centerCoords.longitude]);
+    }
+
+    if (markers && markers.length > 0) {
+      markers.forEach((m) => points.push([m.lat, m.lng]));
+    }
+
+    if (points.length === 0) return;
+
+    if (points.length === 1) {
+      map.setView(points[0], 10, { animate: initialDone.current });
+      initialDone.current = true;
+    } else {
+      const bounds = L.latLngBounds(points);
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12, animate: initialDone.current });
+      initialDone.current = true;
+    }
+  }, [markers, centerCoords, isLoading, map]);
+
+  return null;
+}
+
+export default function PetMap({ 
+  animals = [], 
+  centerCoords = null, 
+  isLoading = false, 
+  onSelectAnimal 
+}) {
   const navigate = useNavigate();
 
-  // Aggregate active shelters using coordinates provided directly from the API response
   const activeMarkers = useMemo(() => {
     if (!Array.isArray(animals) || animals.length === 0) {
       return [];
@@ -1200,7 +1384,7 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
       const lat = animal.latitude ?? animal.shelterLatitude ?? animal.shelter?.latitude;
       const lng = animal.longitude ?? animal.shelterLongitude ?? animal.shelter?.longitude;
 
-      if (!shelterId || !lat || !lng) {
+      if (!shelterId || lat === null || lng === null || isNaN(Number(lat)) || isNaN(Number(lng))) {
         return;
       }
 
@@ -1221,36 +1405,57 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
     return Array.from(shelterMap.values());
   }, [animals]);
 
-  const defaultCenter = [39.44026, -77.94054];
+  const defaultCenter = [39.44026, -77.94054]; // Martinsburg, WV
+  const initialCenter = centerCoords?.latitude && centerCoords?.longitude 
+    ? [centerCoords.latitude, centerCoords.longitude]
+    : defaultCenter;
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-3xl border border-gray-200 shadow-sm dark:border-gray-800">
+    <div className="relative h-full w-full overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <MapContainer
-        center={activeMarkers.length > 0 ? [activeMarkers[0].lat, activeMarkers[0].lng] : defaultCenter}
-        zoom={12}
-        scrollWheelZoom={false}
+        center={initialCenter}
+        zoom={9}
+        scrollWheelZoom={true}
         className="h-full w-full"
         style={{ minHeight: '100%', height: '100%', width: '100%' }}
       >
+        <MapBoundsController 
+          markers={activeMarkers} 
+          centerCoords={centerCoords}
+          isLoading={isLoading}
+        />
+        
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
+        {/* User Search Origin Marker */}
+        {centerCoords?.latitude && centerCoords?.longitude && (
+          <Marker
+            position={[centerCoords.latitude, centerCoords.longitude]}
+            icon={userLocationIcon}
+          >
+            <Popup>
+              <div className="p-1 text-xs">
+                <span className="flex items-center gap-1 font-bold text-blue-600">
+                  <Navigation2 className="h-3 w-3" /> Search Origin
+                </span>
+                <p className="text-slate-600 font-semibold">{centerCoords.name}</p>
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
+        {/* Shelter Markers */}
         {activeMarkers.map((shelter) => (
           <Marker
             key={shelter.id}
             position={[shelter.lat, shelter.lng]}
             icon={customPinIcon}
-            eventHandlers={{
-              mouseover: (e) => {
-                e.target.openPopup();
-              },
-            }}
           >
             <Popup className="custom-popup">
               <div className="p-1 min-w-60">
-                {/* Shelter Header */}
                 <div
                   onClick={() => navigate(`/shelters/${shelter.id}`)}
                   className="cursor-pointer group border-b border-gray-100 dark:border-gray-700 pb-2 hover:opacity-90"
@@ -1275,7 +1480,6 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
                   )}
                 </div>
 
-                {/* Available Pets Count */}
                 <div className="mt-2.5 flex items-center justify-between text-xs">
                   <span className="inline-flex items-center gap-1 font-semibold text-blue-600">
                     <PawPrint className="h-3.5 w-3.5" />
@@ -1290,7 +1494,6 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
                   </button>
                 </div>
 
-                {/* Pet Image Previews */}
                 {shelter.animals.length > 0 && (
                   <div className="mt-3 space-y-1.5 pt-2 border-t border-gray-100 dark:border-gray-700">
                     <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400">
@@ -1320,11 +1523,18 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
                         )}
 
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-                            {pet.name}
-                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                              {pet.name}
+                            </p>
+                            {pet.adoptionFee && (
+                              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                ${Number(pet.adoptionFee).toFixed(0)}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[10px] text-gray-500 truncate">
-                            {pet.breed || pet.species} &bull; {pet.age ? `${pet.age} yrs` : 'Young'}
+                            {pet.breed || pet.species} &bull; {pet.age ? `${pet.age}` : 'Young'}
                           </p>
                         </div>
                       </div>
@@ -1341,7 +1551,7 @@ export default function PetMap({ animals = [], onSelectAnimal }) {
 }
 === FILE: src/components/FilterBar.jsx ===
 import React from 'react';
-import { RotateCcw, Search, MapPin } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 
 export default function FilterBar({ filters, setFilters, onReset }) {
   const handleChange = (key, value) => {
@@ -1395,15 +1605,16 @@ export default function FilterBar({ filters, setFilters, onReset }) {
         <div className="sm:col-span-2">
           <label className={labelClass}>Distance</label>
           <select
-            value={filters.radius || '50'}
+            value={filters.radius || ''}
             onChange={(e) => handleChange('radius', e.target.value)}
             className={inputClass}
           >
+            <option value="">Any Distance</option>
             <option value="5">Within 5 mi</option>
             <option value="15">Within 15 mi</option>
             <option value="30">Within 30 mi</option>
             <option value="50">Within 50 mi</option>
-            <option value="500">Any Distance</option>
+            <option value="100">Within 100 mi</option>
           </select>
         </div>
       </div>
@@ -1420,6 +1631,10 @@ export default function FilterBar({ filters, setFilters, onReset }) {
             <option value="">All Species</option>
             <option value="DOG">Dogs</option>
             <option value="CAT">Cats</option>
+            <option value="BIRD">Birds</option>
+            <option value="RABBIT">Rabbits</option>
+            <option value="HORSE">Horses</option>
+            <option value="SMALL & FURRY">Small & Furry</option>
           </select>
         </div>
 
@@ -1447,6 +1662,7 @@ export default function FilterBar({ filters, setFilters, onReset }) {
             <option value="SMALL">Small</option>
             <option value="MEDIUM">Medium</option>
             <option value="LARGE">Large</option>
+            <option value="EXTRA_LARGE">Extra Large</option>
           </select>
         </div>
 
@@ -1875,25 +2091,28 @@ import FavoritesPage from './pages/FavoritesPage';
 import SettingsPage from './pages/SettingsPage';
 import BreedsPage from './pages/BreedsPage';
 import TermsPage from './pages/TermsPage';
+import { DataCacheProvider } from './context/DataCacheContext';
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-[#060b18] dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
-      <Navbar />
-      <main className="flex-1">
-        <Routes>
-          <Route path="/" element={<ExplorePage />} />
-          <Route path="/explore" element={<ExplorePage />} />
-          <Route path="/shelters" element={<SheltersDirectoryPage />} />
-          <Route path="/shelters/:shelterId" element={<ShelterDetailsPage />} />
-          <Route path="/favorites" element={<FavoritesPage />} />
-          <Route path="/breeds" element={<BreedsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/terms" element={<TermsPage />} />
-        </Routes>
-      </main>
-      <AuthModal />
-    </div>
+    <DataCacheProvider>
+      <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-[#060b18] dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
+        <Navbar />
+        <main className="flex-1">
+          <Routes>
+            <Route path="/" element={<ExplorePage />} />
+            <Route path="/explore" element={<ExplorePage />} />
+            <Route path="/shelters" element={<SheltersDirectoryPage />} />
+            <Route path="/shelters/:shelterId" element={<ShelterDetailsPage />} />
+            <Route path="/favorites" element={<FavoritesPage />} />
+            <Route path="/breeds" element={<BreedsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+          </Routes>
+        </main>
+        <AuthModal />
+      </div>
+    </DataCacheProvider>
   );
 }
 === FILE: src/data/BreedsData.js ===
@@ -2402,7 +2621,7 @@ export default function FavoritesPage() {
   );
 }
 === FILE: src/pages/SheltersDirectoryPage.jsx ===
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Building2, 
   MapPin, 
@@ -2417,6 +2636,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useDataCache } from '../context/DataCacheContext';
 import api from '../services/api';
 
 const SHELTER_COORDS = {
@@ -2441,33 +2661,50 @@ function calculateDistanceMiles(lat1, lon1, lat2, lon2) {
 export default function SheltersDirectoryPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { getCachedData, setCachedData } = useDataCache();
 
-  const [sheltersList, setSheltersList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = 'all_shelters_directory';
+  const cachedEntry = getCachedData(cacheKey);
+
+  const [sheltersList, setSheltersList] = useState(() => {
+    return cachedEntry?.data || [];
+  });
+  const [loading, setLoading] = useState(!cachedEntry);
   const [search, setSearch] = useState('');
-  const [zipCode, setZipCode] = useState(() => user?.zipCode || '25405');
-  const [radius, setRadius] = useState('50');
+  
+  // Default to user's saved ZIP if authenticated, otherwise empty
+  const [zipCode, setZipCode] = useState(() => user?.zipCode || '');
+  // Default to Any Distance (empty string)
+  const [radius, setRadius] = useState(() => (user?.zipCode ? '50' : ''));
   const [userCoords, setUserCoords] = useState(null);
   const [geoLoading, setGeoLoading] = useState(false);
 
+  // Auto-center search when a user signs in or registers with a ZIP code
   useEffect(() => {
-    if (user?.zipCode) {
+    if (user?.zipCode && user.zipCode.trim().length === 5) {
       setZipCode(user.zipCode);
+      setRadius('50');
     }
   }, [user]);
 
   const loadShelters = useCallback(async () => {
-    setLoading(true);
+    if (!cachedEntry) {
+      setLoading(true);
+    }
     try {
       const res = await api.get('/shelters');
-      setSheltersList(Array.isArray(res.data) ? res.data : []);
+      const data = Array.isArray(res.data) ? res.data : (res.data?.content || []);
+      setSheltersList(data);
+      setCachedData(cacheKey, data);
     } catch (err) {
       console.error('Failed to load /api/shelters:', err);
-      setSheltersList([]);
+      if (!cachedEntry) {
+        setSheltersList([]);
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cachedEntry, setCachedData]);
 
   useEffect(() => {
     loadShelters();
@@ -2479,6 +2716,7 @@ export default function SheltersDirectoryPage() {
       return;
     }
 
+    let isMounted = true;
     async function fetchUserZipCoords() {
       setGeoLoading(true);
       try {
@@ -2486,68 +2724,77 @@ export default function SheltersDirectoryPage() {
         if (res.ok) {
           const data = await res.json();
           const place = data.places?.[0];
-          if (place) {
+          if (place && isMounted) {
             setUserCoords({
               latitude: parseFloat(place.latitude),
               longitude: parseFloat(place.longitude),
               name: `${place['place name']}, ${place['state abbreviation']}`,
             });
           }
+        } else if (isMounted) {
+          setUserCoords(null);
         }
       } catch {
-        setUserCoords(null);
+        if (isMounted) setUserCoords(null);
       } finally {
-        setGeoLoading(false);
+        if (isMounted) setGeoLoading(false);
       }
     }
 
     fetchUserZipCoords();
+    return () => {
+      isMounted = false;
+    };
   }, [zipCode]);
 
-  const displayShelters = sheltersList
-    .map((shelter) => {
-      const coords = SHELTER_COORDS[shelter.id] || {
-        lat: parseFloat(shelter.latitude || 39.41),
-        lng: parseFloat(shelter.longitude || -77.91),
-      };
+  const displayShelters = useMemo(() => {
+    return sheltersList
+      .map((shelter) => {
+        const coords = SHELTER_COORDS[shelter.id] || {
+          lat: parseFloat(shelter.latitude || 39.41),
+          lng: parseFloat(shelter.longitude || -77.91),
+        };
 
-      let distance = null;
-      if (userCoords && coords) {
-        distance = calculateDistanceMiles(
-          userCoords.latitude,
-          userCoords.longitude,
-          coords.lat,
-          coords.lng
-        );
-      }
+        let distance = null;
+        if (userCoords && coords.lat && coords.lng) {
+          distance = calculateDistanceMiles(
+            userCoords.latitude,
+            userCoords.longitude,
+            coords.lat,
+            coords.lng
+          );
+        }
 
-      return {
-        ...shelter,
-        distance,
-      };
-    })
-    .filter((shelter) => {
-      const name = (shelter.name || '').toLowerCase();
-      const addr = (shelter.address || shelter.location || '').toLowerCase();
-      const term = search.toLowerCase();
+        return {
+          ...shelter,
+          distance,
+        };
+      })
+      .filter((shelter) => {
+        const name = (shelter.name || '').toLowerCase();
+        const addr = (shelter.address || shelter.location || '').toLowerCase();
+        const term = search.toLowerCase().trim();
 
-      const matchesSearch = name.includes(term) || addr.includes(term);
-      const withinRadius =
-        userCoords && shelter.distance !== null
-          ? shelter.distance <= parseFloat(radius)
-          : true;
+        const matchesSearch = term === '' || name.includes(term) || addr.includes(term);
+        const radiusNum = parseFloat(radius);
+        const withinRadius =
+          userCoords && shelter.distance !== null && radiusNum > 0
+            ? shelter.distance <= radiusNum
+            : true;
 
-      return matchesSearch && withinRadius;
-    })
-    .sort((a, b) => {
-      if (a.distance !== null && b.distance !== null) return a.distance - b.distance;
-      return 0;
-    });
+        return matchesSearch && withinRadius;
+      })
+      .sort((a, b) => {
+        if (a.distance !== null && b.distance !== null) return a.distance - b.distance;
+        return 0;
+      });
+  }, [sheltersList, userCoords, search, radius]);
 
   const handleReset = () => {
     setSearch('');
-    setZipCode(user?.zipCode || '25405');
-    setRadius('50');
+    setZipCode(user?.zipCode || '');
+    setRadius(user?.zipCode ? '50' : '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const inputClass =
@@ -2585,7 +2832,7 @@ export default function SheltersDirectoryPage() {
 
           <div className="sm:col-span-3">
             <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-              Your ZIP Code
+              ZIP Code
             </label>
             <div className="relative">
               <MapPin className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -2612,11 +2859,12 @@ export default function SheltersDirectoryPage() {
               onChange={(e) => setRadius(e.target.value)}
               className={inputClass}
             >
+              <option value="">Any Distance</option>
               <option value="5">Within 5 miles</option>
               <option value="15">Within 15 miles</option>
               <option value="30">Within 30 miles</option>
               <option value="50">Within 50 miles</option>
-              <option value="500">Any Distance</option>
+              <option value="100">Within 100 miles</option>
             </select>
           </div>
         </div>
@@ -2626,11 +2874,11 @@ export default function SheltersDirectoryPage() {
             <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
               <Navigation2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
               <span>
-                Origin: <strong className="text-slate-900 dark:text-white">{userCoords.name}</strong> ({zipCode}) &bull; Filter: <strong className="text-slate-900 dark:text-white">{radius} miles</strong>
+                Origin: <strong className="text-slate-900 dark:text-white">{userCoords.name}</strong> ({zipCode}) &bull; Filter: <strong className="text-slate-900 dark:text-white">{radius ? `${radius} miles` : 'Any Distance'}</strong>
               </span>
             </div>
           ) : (
-            <span className="text-slate-500 dark:text-slate-400">Showing all {sheltersList.length} database shelters.</span>
+            <span className="text-slate-500 dark:text-slate-400">Showing all {sheltersList.length} registered shelters.</span>
           )}
 
           <button
@@ -2645,7 +2893,7 @@ export default function SheltersDirectoryPage() {
       </div>
 
       {/* Shelters Grid */}
-      {loading ? (
+      {loading && sheltersList.length === 0 ? (
         <div className="flex justify-center p-12">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
         </div>
@@ -2656,15 +2904,13 @@ export default function SheltersDirectoryPage() {
               ? 'No shelters found in database.'
               : `No shelters found within ${radius} miles of ${userCoords?.name || zipCode}.`}
           </p>
-          {sheltersList.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setRadius('500')}
-              className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition"
-            >
-              Expand search radius
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleReset}
+            className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition cursor-pointer"
+          >
+            Clear all filters
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -3717,6 +3963,7 @@ import PetCard from '../components/PetCard';
 import PetMap from '../components/PetMap';
 import PetModal from '../components/PetModal';
 import { useAuth } from '../context/AuthContext';
+import { useDataCache } from '../context/DataCacheContext';
 import { animalService } from '../services/api';
 
 function calculateDistanceMiles(lat1, lon1, lat2, lon2) {
@@ -3736,16 +3983,7 @@ function calculateDistanceMiles(lat1, lon1, lat2, lon2) {
 export default function ExplorePage() {
   const { user } = useAuth();
   const location = useLocation();
-  const [rawAnimals, setRawAnimals] = useState([]);
-  const [selectedPet, setSelectedPet] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [userCoords, setUserCoords] = useState(null);
-
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [totalElements, setTotalElements] = useState(0);
+  const { getCachedData, setCachedData } = useDataCache();
 
   const [filters, setFilters] = useState({
     name: '',
@@ -3755,91 +3993,144 @@ export default function ExplorePage() {
     size: '',
     minAge: '',
     maxAge: '',
-    zipCode: '25405',
-    radius: '50',
+    zipCode: user?.zipCode || '',
+    radius: user?.zipCode ? '50' : '',
     goodWithKids: false,
     goodWithDogs: false,
     goodWithCats: false,
   });
+
+  const [selectedPet, setSelectedPet] = useState(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [userCoords, setUserCoords] = useState(null);
+  const [geoReady, setGeoReady] = useState(false);
+
+  const cacheKey = useMemo(() => {
+    return `explore_${JSON.stringify(filters)}_coords_${userCoords?.latitude}_${currentPage}`;
+  }, [filters, userCoords, currentPage]);
+
+  const cachedEntry = getCachedData(cacheKey);
+
+  const [rawAnimals, setRawAnimals] = useState(() => {
+    if (cachedEntry?.data) {
+      return cachedEntry.data.content || (Array.isArray(cachedEntry.data) ? cachedEntry.data : []);
+    }
+    return [];
+  });
+
+  const [totalPages, setTotalPages] = useState(() => cachedEntry?.data?.totalPages || 0);
+  const [totalElements, setTotalElements] = useState(() => cachedEntry?.data?.totalElements || 0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (location.state?.breed) {
       setFilters((prev) => ({
         ...prev,
         breed: location.state.breed,
-        species: location.state.species ? location.state.species.toLowerCase() : prev.species,
+        species: location.state.species ? location.state.species.toUpperCase() : prev.species,
       }));
     }
   }, [location.state]);
 
   useEffect(() => {
-    if (user?.zipCode) {
-      setFilters((prev) => ({ ...prev, zipCode: user.zipCode }));
+    if (user?.zipCode && user.zipCode.trim().length === 5) {
+      setFilters((prev) => ({
+        ...prev,
+        zipCode: user.zipCode.trim(),
+        radius: prev.radius || '50',
+      }));
+      setCurrentPage(0);
     }
   }, [user]);
 
+  // Geocode ZIP code to exact Latitude/Longitude
   useEffect(() => {
     if (!filters.zipCode || filters.zipCode.trim().length !== 5) {
       setUserCoords(null);
+      setGeoReady(true);
       return;
     }
 
+    let isMounted = true;
     async function fetchZipCoords() {
       try {
         const res = await fetch(`https://api.zippopotam.us/us/${filters.zipCode.trim()}`);
         if (res.ok) {
           const data = await res.json();
           const place = data.places?.[0];
-          if (place) {
+          if (place && isMounted) {
             setUserCoords({
               latitude: parseFloat(place.latitude),
               longitude: parseFloat(place.longitude),
               name: `${place['place name']}, ${place['state abbreviation']}`,
             });
           }
-        } else {
+        } else if (isMounted) {
           setUserCoords(null);
         }
       } catch {
-        setUserCoords(null);
+        if (isMounted) setUserCoords(null);
+      } finally {
+        if (isMounted) setGeoReady(true);
       }
     }
 
+    setGeoReady(false);
     fetchZipCoords();
+    return () => {
+      isMounted = false;
+    };
   }, [filters.zipCode]);
 
   const fetchAnimals = useCallback(
-    async (pageToFetch = 0) => {
-      setLoading(true);
+    async (pageToFetch = 0, forceLoading = false) => {
+      const targetCacheKey = `explore_${JSON.stringify(filters)}_coords_${userCoords?.latitude}_${pageToFetch}`;
+      const activeCache = getCachedData(targetCacheKey);
+
+      if (!activeCache || forceLoading) {
+        setLoading(true);
+      }
       setError('');
 
       const payload = {};
       if (filters.name?.trim()) payload.name = filters.name.trim();
       if (filters.breed?.trim()) payload.breed = filters.breed.trim();
-      if (filters.species) payload.species = filters.species;
-      if (filters.gender) payload.gender = filters.gender;
+      if (filters.species) payload.species = filters.species.toUpperCase();
+      if (filters.gender) payload.gender = filters.gender.toUpperCase();
       if (filters.size) payload.size = filters.size;
-      if (filters.minAge) payload.minAge = Number(filters.minAge);
-      if (filters.maxAge) payload.maxAge = Number(filters.maxAge);
+      if (filters.minAge !== '' && filters.minAge !== undefined) payload.minAge = parseInt(filters.minAge, 10);
+      if (filters.maxAge !== '' && filters.maxAge !== undefined) payload.maxAge = parseInt(filters.maxAge, 10);
+      if (filters.zipCode?.trim()) payload.zipCode = filters.zipCode.trim();
+
+      // Send geocoded coordinates to backend
+      if (userCoords?.latitude && userCoords?.longitude) {
+        payload.latitude = userCoords.latitude;
+        payload.longitude = userCoords.longitude;
+      }
+      if (filters.radius && parseFloat(filters.radius) > 0) {
+        payload.radiusMiles = parseFloat(filters.radius);
+      }
+
       if (filters.goodWithKids) payload.goodWithKids = true;
       if (filters.goodWithDogs) payload.goodWithDogs = true;
       if (filters.goodWithCats) payload.goodWithCats = true;
-      if (filters.zipCode?.trim()) payload.zipCode = filters.zipCode.trim();
-      if (filters.radius) payload.radiusMiles = parseFloat(filters.radius);
 
       try {
-        const data = await animalService.searchAnimals(payload, pageToFetch, 16);
-        
-        if (data && data.content) {
+        const data = await animalService.searchAnimals(payload, pageToFetch, 20);
+
+        if (data && Array.isArray(data.content)) {
           setRawAnimals(data.content);
-          setTotalPages(data.totalPages || 0);
-          setTotalElements(data.totalElements || 0);
-          setCurrentPage(data.number || 0);
+          setTotalPages(data.totalPages || 1);
+          setTotalElements(data.totalElements || data.content.length);
+          setCurrentPage(data.number || pageToFetch);
+          setCachedData(targetCacheKey, data);
         } else if (Array.isArray(data)) {
           setRawAnimals(data);
           setTotalPages(1);
           setTotalElements(data.length);
           setCurrentPage(0);
+          setCachedData(targetCacheKey, data);
         } else {
           setRawAnimals([]);
           setTotalPages(0);
@@ -3847,75 +4138,105 @@ export default function ExplorePage() {
         }
       } catch (err) {
         console.error('Failed to load animals:', err);
-        setError('Unable to load animals from backend server.');
-        setRawAnimals([]);
+        if (!activeCache) {
+          setError('Unable to load animals from backend server.');
+          setRawAnimals([]);
+        }
       } finally {
         setLoading(false);
       }
     },
-    [
-      filters.name,
-      filters.breed,
-      filters.species,
-      filters.gender,
-      filters.size,
-      filters.minAge,
-      filters.maxAge,
-      filters.goodWithKids,
-      filters.goodWithDogs,
-      filters.goodWithCats,
-      filters.zipCode,
-      filters.radius,
-    ]
+    [filters, userCoords, getCachedData, setCachedData]
   );
 
   useEffect(() => {
-    setCurrentPage(0);
-    fetchAnimals(0);
-  }, [fetchAnimals]);
+    if (geoReady) {
+      fetchAnimals(currentPage);
+    }
+  }, [fetchAnimals, currentPage, geoReady]);
 
   const handlePageChange = (newPage) => {
-    setCurrentPage(newPage);
-    fetchAnimals(newPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    setCurrentPage(newPage);
+    fetchAnimals(newPage, true);
   };
 
   const filteredAnimals = useMemo(() => {
+    const radiusLimit = parseFloat(filters.radius);
+    const isStrictRadius = !isNaN(radiusLimit) && radiusLimit > 0;
+
     return rawAnimals
       .map((animal) => {
-        // Read real coordinates sent directly by the backend DTO
-        const lat = animal.shelterLatitude ?? animal.shelter?.latitude ?? null;
-        const lng = animal.shelterLongitude ?? animal.shelter?.longitude ?? null;
+        const shelter = animal.shelter;
+        const lat =
+          animal.shelterLatitude ??
+          shelter?.latitude ??
+          shelter?.lat ??
+          shelter?.location?.coordinates?.[1] ??
+          shelter?.location?.y ??
+          null;
+
+        const lng =
+          animal.shelterLongitude ??
+          shelter?.longitude ??
+          shelter?.lon ??
+          shelter?.location?.coordinates?.[0] ??
+          shelter?.location?.x ??
+          null;
 
         let distance = null;
         if (userCoords && lat && lng) {
           distance = calculateDistanceMiles(
             userCoords.latitude,
             userCoords.longitude,
-            lat,
-            lng
+            parseFloat(lat),
+            parseFloat(lng)
           );
         }
 
         return {
           ...animal,
-          latitude: lat,
-          longitude: lng,
+          latitude: lat ? parseFloat(lat) : null,
+          longitude: lng ? parseFloat(lng) : null,
           distance,
         };
       })
       .filter((animal) => {
-        if (userCoords && animal.distance !== null && filters.radius) {
-          const maxRadius = parseFloat(filters.radius);
-          return animal.distance <= maxRadius;
+        // Enforce strict distance check when a radius is active
+        if (userCoords && isStrictRadius) {
+          if (animal.distance === null || animal.distance > radiusLimit) {
+            return false;
+          }
         }
+
+        if (filters.name?.trim()) {
+          const nameTerm = filters.name.toLowerCase().trim();
+          const matchName = animal.name?.toLowerCase().includes(nameTerm);
+          const matchBreed = animal.breed?.toLowerCase().includes(nameTerm);
+          if (!matchName && !matchBreed) return false;
+        }
+
+        if (filters.goodWithKids && animal.goodWithKids !== true) return false;
+        if (filters.goodWithDogs && animal.goodWithDogs !== true) return false;
+        if (filters.goodWithCats && animal.goodWithCats !== true) return false;
+
         return true;
       })
       .sort((a, b) => {
         if (a.distance !== null && b.distance !== null) return a.distance - b.distance;
+        if (a.distance !== null) return -1;
+        if (b.distance !== null) return 1;
         return 0;
       });
-  }, [rawAnimals, userCoords, filters.radius]);
+  }, [
+    rawAnimals,
+    userCoords,
+    filters.radius,
+    filters.name,
+    filters.goodWithKids,
+    filters.goodWithDogs,
+    filters.goodWithCats,
+  ]);
 
   const handleReset = () => {
     setFilters({
@@ -3926,18 +4247,21 @@ export default function ExplorePage() {
       size: '',
       minAge: '',
       maxAge: '',
-      zipCode: user?.zipCode || '25405',
-      radius: '50',
+      zipCode: '',
+      radius: '',
       goodWithKids: false,
       goodWithDogs: false,
       goodWithCats: false,
     });
+    setUserCoords(null);
+    setCurrentPage(0);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSelectAnimal = async (animal) => {
     try {
       const res = await animalService.getAnimalById(animal.id);
-      setSelectedPet(res);
+      setSelectedPet(res || animal);
     } catch {
       setSelectedPet(animal);
     }
@@ -3960,13 +4284,20 @@ export default function ExplorePage() {
             <div className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50/90 px-4 py-2 text-xs font-semibold text-blue-900 shadow-sm dark:border-blue-800/80 dark:bg-blue-950/70 dark:text-blue-200 backdrop-blur-sm">
               <Navigation2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
               <span>
-                Searching near <strong className="font-black text-blue-950 dark:text-white">{userCoords.name}</strong> ({filters.zipCode}) &bull; {filters.radius} mi
+                Searching near <strong className="font-black text-blue-950 dark:text-white">{userCoords.name}</strong> ({filters.zipCode}) {filters.radius ? `• ${filters.radius} mi` : '• Any Distance'}
               </span>
             </div>
           )}
         </div>
 
-        <FilterBar filters={filters} setFilters={setFilters} onReset={handleReset} />
+        <FilterBar 
+          filters={filters} 
+          setFilters={(val) => {
+            setCurrentPage(0);
+            setFilters(val);
+          }} 
+          onReset={handleReset} 
+        />
 
         {error && (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">
@@ -3978,14 +4309,16 @@ export default function ExplorePage() {
           {/* Pet Cards Feed */}
           <div className="lg:col-span-7 flex flex-col space-y-4">
             {loading ? (
-              <div className="flex h-64 items-center justify-center">
+              <div className="flex h-96 items-center justify-center rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/40">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
               </div>
             ) : filteredAnimals.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-[#0b1329]/40 space-y-3">
                 <PawPrint className="mx-auto h-8 w-8 text-slate-400 dark:text-slate-600" />
                 <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
-                  No animals found within {filters.radius} miles of {userCoords?.name || filters.zipCode}.
+                  {userCoords && filters.radius 
+                    ? `No animals found within ${filters.radius} miles of ${userCoords.name}.`
+                    : 'No animals found matching your criteria.'}
                 </p>
                 <button
                   type="button"
@@ -4014,7 +4347,7 @@ export default function ExplorePage() {
                       type="button"
                       onClick={() => handlePageChange(Math.max(currentPage - 1, 0))}
                       disabled={currentPage === 0 || loading}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/80 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/80 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
                     >
                       <ChevronLeft className="h-3.5 w-3.5" />
                       Previous
@@ -4030,7 +4363,7 @@ export default function ExplorePage() {
                       type="button"
                       onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages - 1))}
                       disabled={currentPage >= totalPages - 1 || loading}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/80 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/80 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
                     >
                       Next
                       <ChevronRight className="h-3.5 w-3.5" />
@@ -4043,7 +4376,12 @@ export default function ExplorePage() {
 
           {/* Map View */}
           <div className="lg:col-span-5 lg:sticky lg:top-24 h-140">
-            <PetMap animals={filteredAnimals} onSelectAnimal={handleSelectAnimal} />
+            <PetMap 
+              animals={filteredAnimals} 
+              centerCoords={userCoords}
+              isLoading={loading || !geoReady}
+              onSelectAnimal={handleSelectAnimal} 
+            />
           </div>
         </div>
       </div>
@@ -4059,9 +4397,8 @@ export default function ExplorePage() {
 === FILE: src/services/api.js ===
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://adoptme-api-m0ei.onrender.com/api'; 
-//'http://localhost:8080/api'; 
-
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'; 
+//'https://adoptme-api-m0ei.onrender.com/api'; 
 
 const api = axios.create({
   baseURL: API_BASE_URL,

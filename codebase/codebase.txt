@@ -219,29 +219,56 @@ public class ScrapedAnimalDto {
 === FILE: src/main/java/com/htabler0405/adoptme/dto/AnimalFilterRequest.java ===
 package com.htabler0405.adoptme.dto;
 
-import com.htabler0405.adoptme.sources.SourceType;
-
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
+import com.htabler0405.adoptme.sources.SourceType;
+
 @Data
+@Builder
 @Getter
 @Setter
-public class AnimalFilterRequest{
-    private String description;
-    private String species;
+@NoArgsConstructor
+@AllArgsConstructor
+public class AnimalFilterRequest {
+    // Basic text search & identifiers
+    private String name;
     private String breed;
+    private String species;
+    private String gender;
     private String size;
     private String color;
-    private Boolean hypoallergenic;
     private SourceType sourceType;
+    private Long shelterId;
+
+    // Age & Budget
+    private Integer minAge;
+    private Integer maxAge;
+    private String age; // "Baby", "Young", "Adult", "Senior"
+    private BigDecimal maxAdoptionFee;
+
+    // Spatial & Location
     private String zipCode;
+    private Double radiusMiles;
     private Double latitude;
     private Double longitude;
-    private Double radiusMiles;
-    private String gender;
-    private String age;
+
+    // Health & Compatibility Flags
+    private Boolean hypoallergenic;
+    private Boolean goodWithKids;
+    private Boolean goodWithDogs;
+    private Boolean goodWithCats;
+    private Boolean houseTrained;
+    private Boolean specialNeeds;
+
+    // Status
+    private String status;
 }
 === FILE: src/main/java/com/htabler0405/adoptme/dto/UpdatePasswordRequest.java ===
 package com.htabler0405.adoptme.dto;
@@ -285,6 +312,93 @@ public class UpdateUsernameRequest {
     public String getNewUsername() { return newUsername; }
     public void setNewUsername(String newUsername) { this.newUsername = newUsername; }
 }
+=== FILE: src/main/java/com/htabler0405/adoptme/dto/rescuegroups/RescueGroupsResponseDto.java ===
+package com.htabler0405.adoptme.dto.rescuegroups;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
+import java.util.Map;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+public record RescueGroupsResponseDto(
+    List<RescueGroupsAnimalData> data,
+    List<RescueGroupsIncludedItem> included
+) {
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RescueGroupsAnimalData(
+        String id,
+        String type,
+        AnimalAttributes attributes,
+        AnimalRelationships relationships
+    ) {
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record AnimalAttributes(
+            String name,
+            String breedPrimary,
+            String breedString,
+            String species,
+            String sex,
+            String ageGroup,
+            String ageString,
+            String sizeGroup,
+            String descriptionText,
+            String descriptionHtml,
+            String adoptionFeeString,
+            @JsonProperty("isHypoallergenic") Boolean hypoallergenic,
+            @JsonProperty("isGoodWithKids") Boolean goodWithKids,
+            @JsonProperty("isGoodWithDogs") Boolean goodWithDogs,
+            @JsonProperty("isGoodWithCats") Boolean goodWithCats,
+            String url
+        ) {}
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record AnimalRelationships(
+            OrgRelationship orgs,
+            PictureRelationship pictures
+        ) {}
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record OrgRelationship(
+            List<RelationshipData> data
+        ) {}
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record PictureRelationship(
+            List<RelationshipData> data
+        ) {}
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record RelationshipData(
+            String id,
+            String type
+        ) {}
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RescueGroupsIncludedItem(
+        String id,
+        String type,
+        IncludedAttributes attributes
+    ) {
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record IncludedAttributes(
+            String name,
+            String email,
+            String phone,
+            String street,
+            String city,
+            String state,
+            String postalcode,
+            String url,
+            Double lat,
+            Double lon,
+            @JsonProperty("original") Map<String, Object> original,
+            @JsonProperty("large") Map<String, Object> large
+        ) {}
+    }
+}
 === FILE: src/main/java/com/htabler0405/adoptme/dto/CreateUserRequest.java ===
 package com.htabler0405.adoptme.dto;
 
@@ -306,6 +420,8 @@ public class CreateUserRequest {
 }
 === FILE: src/main/java/com/htabler0405/adoptme/dto/AnimalResponseDto.java ===
 package com.htabler0405.adoptme.dto;
+
+import java.math.BigDecimal;
 
 import com.htabler0405.adoptme.entities.AnimalProfile;
 import com.htabler0405.adoptme.entities.Shelter;
@@ -334,6 +450,7 @@ public class AnimalResponseDto {
     private Boolean goodWithKids;
     private Boolean goodWithDogs;
     private Boolean goodWithCats;
+    private BigDecimal adoptionFee;
 
     // Shelter details
     private Long shelterId;
@@ -356,6 +473,7 @@ public class AnimalResponseDto {
         this.goodWithKids = animal.getGoodWithKids();
         this.goodWithDogs = animal.getGoodWithDogs();
         this.goodWithCats = animal.getGoodWithCats();
+        this.adoptionFee = animal.getAdoptionFee();
 
         Shelter shelter = animal.getShelter();
         if (shelter != null) {
@@ -441,61 +559,6 @@ public class FeedbackRequest {
     @JsonAlias("comment")
     private String description;
 }
-=== FILE: src/main/java/com/htabler0405/adoptme/configuration/AutomatedDataIngestion.java ===
-package com.htabler0405.adoptme.configuration;
-
-import com.htabler0405.adoptme.entities.Shelter;
-import com.htabler0405.adoptme.repositories.AnimalShelterRepository;
-import com.htabler0405.adoptme.services.scraper.AnimalScraperService;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.Scheduled;
-
-import java.util.List;
-
-@Configuration
-@EnableScheduling
-public class AutomatedDataIngestion {
-/* 
-   private static final Logger log = LoggerFactory.getLogger(AutomatedDataIngestion.class);
-
-    private final AnimalScraperService animalScraperService;
-    private final AnimalShelterRepository shelterRepository;
-
-    public AutomatedDataIngestion(AnimalScraperService animalScraperService,
-                                  AnimalShelterRepository shelterRepository) {
-        this.animalScraperService = animalScraperService;
-        this.shelterRepository = shelterRepository;
-    }
-
-    @Bean
-    public CommandLineRunner runOnStartup() {
-        return args -> {
-            log.info("Starting automated shelter discovery and pet ingestion...");
-            runFullSyncPipeline();
-        };
-    }
-
-    @Scheduled(fixedRate = 43200000, initialDelay = 43200000) // Runs every 12 hours
-    public void runFullSyncPipeline() {
-        List<Shelter> allShelters = shelterRepository.findAll();
-        log.info("Starting listing scrapes across {} registered shelters", allShelters.size());
-
-        for (Shelter shelter : allShelters) {
-            try {
-                animalScraperService.scrapeAnimalsForShelter(shelter);
-            } catch (Exception e) {
-                log.error("Failed to scrape animals for {}: {}", shelter.getName(), e.getMessage());
-            }
-        }
-    }
-*/
-}
 === FILE: src/main/java/com/htabler0405/adoptme/configuration/SecurityConfig.java ===
 package com.htabler0405.adoptme.configuration;
 
@@ -546,6 +609,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/shelters/**").permitAll()
                 .requestMatchers("/api/feedback/**").permitAll()
                 
+                // Public data ingestion sync endpoints
+                .requestMatchers("/api/admin/ingest/**").permitAll()
+                
                 // Everything else (favorites, account updates, delete) requires JWT token
                 .anyRequest().authenticated()
             )
@@ -572,6 +638,34 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+}
+=== FILE: src/main/java/com/htabler0405/adoptme/configuration/RescueGroupsConfig.java ===
+package com.htabler0405.adoptme.configuration;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.web.client.RestClient;
+
+@Configuration
+public class RescueGroupsConfig {
+
+    @Value("${rescuegroups.api.key}")
+    private String apiKey;
+
+    @Value("${rescuegroups.api.base-url:https://api.rescuegroups.org/v5}")
+    private String baseUrl;
+
+    @Bean
+    public RestClient rescueGroupsRestClient() {
+        return RestClient.builder()
+                .baseUrl(baseUrl)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, apiKey)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
     }
 }
 === FILE: src/main/java/com/htabler0405/adoptme/configuration/JwtAuthenticationFilter.java ===
@@ -648,6 +742,74 @@ public class GeometryConfig {
         return new GeometryFactory(new PrecisionModel(), 4326);
     }
 }
+=== FILE: src/main/java/com/htabler0405/adoptme/scheduler/RescueGroupsScheduler.java ===
+package com.htabler0405.adoptme.scheduler;
+
+import com.htabler0405.adoptme.services.RescueGroupsSyncService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+@Slf4j
+@Component
+public class RescueGroupsScheduler {
+
+    private final RescueGroupsSyncService syncService;
+
+    private static final String DEFAULT_ZIP = "25405";
+    private static final int DEFAULT_RADIUS_MILES = 100;
+
+    public RescueGroupsScheduler(RescueGroupsSyncService syncService) {
+        this.syncService = syncService;
+    }
+
+    /**
+     * Runs quickly on server startup in a background thread so the app boots instantly
+     * and seeds local Quad-State / WV / MD / VA data right away.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void onStartup() {
+        log.info("Triggering quick startup pet sync for ZIP {} ({} mi)...", DEFAULT_ZIP, DEFAULT_RADIUS_MILES);
+        new Thread(() -> {
+            try {
+                int saved = syncService.syncAnimalsNearZip(DEFAULT_ZIP, DEFAULT_RADIUS_MILES);
+                log.info("Startup pet sync complete. Seeded {} local records.", saved);
+            } catch (Exception e) {
+                log.error("Startup sync failed: {}", e.getMessage());
+            }
+        }).start();
+    }
+
+    /**
+     * Daily local refresh: Runs every day at 3:00 AM server time for your primary 100-mile radius.
+     */
+    @Scheduled(cron = "0 0 3 * * ?")
+    public void runDailyLocalSync() {
+        log.info("Starting daily local pet sync for {} ({} mi)...", DEFAULT_ZIP, DEFAULT_RADIUS_MILES);
+        try {
+            int savedCount = syncService.syncAnimalsNearZip(DEFAULT_ZIP, DEFAULT_RADIUS_MILES);
+            log.info("Daily local sync complete: Ingested/updated {} records.", savedCount);
+        } catch (Exception e) {
+            log.error("Daily local pet sync failed: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Weekly nationwide bulk ingestion: Runs every Sunday at 4:00 AM server time across all 8 national hubs.
+     * Executes non-blocking in the background via @Async.
+     */
+    @Scheduled(cron = "0 0 4 * * SUN")
+    public void runWeeklyNationwideSync() {
+        log.info("Starting scheduled weekly nationwide bulk ingestion...");
+        try {
+            syncService.syncNationwideDatabase();
+        } catch (Exception e) {
+            log.error("Weekly nationwide sync failed: {}", e.getMessage(), e);
+        }
+    }
+}
 === FILE: src/main/java/com/htabler0405/adoptme/repositories/AnimalShelterRepository.java ===
 package com.htabler0405.adoptme.repositories;
 
@@ -676,6 +838,7 @@ public interface AnimalShelterRepository extends JpaRepository<Shelter, Long> {
                                      @Param("radiusMeters") double radiusMeters);
 
     Optional<Shelter> findByName(String name);
+    Optional<Shelter> findByRescuegroupsOrgId(Long rescuegroupsOrgId);
 }
 === FILE: src/main/java/com/htabler0405/adoptme/repositories/AnimalProfileRepository.java ===
 package com.htabler0405.adoptme.repositories;
@@ -683,6 +846,8 @@ package com.htabler0405.adoptme.repositories;
 import com.htabler0405.adoptme.entities.AnimalProfile;
 import com.htabler0405.adoptme.entities.Shelter;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
@@ -735,6 +900,113 @@ public interface AnimalProfileRepository extends JpaRepository<AnimalProfile, Lo
             @Param("longitude") double longitude,
             @Param("latitude") double latitude,
             @Param("radiusMiles") double radiusMiles
+    );
+    Optional<AnimalProfile> findByRescuegroupsPetId(Long rescuegroupsPetId);
+
+    // 1. Strict Radius Search (PostGIS ST_DWithin + ST_Distance)
+    @Query(value = """
+        SELECT a.* FROM animal_profiles a
+        INNER JOIN shelters s ON a.shelter_id = s.id
+        WHERE s.location IS NOT NULL
+          AND (:species IS NULL OR LOWER(a.species) = LOWER(:species))
+          AND (:gender IS NULL OR UPPER(a.gender) = UPPER(:gender))
+          AND (:size IS NULL OR LOWER(a.size) = LOWER(:size))
+          AND (:breed IS NULL OR LOWER(a.breed) LIKE LOWER(CONCAT('%', :breed, '%')))
+          AND (:name IS NULL OR LOWER(a.name) LIKE LOWER(CONCAT('%', :name, '%')))
+          AND (:goodWithKids IS NULL OR a.good_with_kids = :goodWithKids)
+          AND (:goodWithDogs IS NULL OR a.good_with_dogs = :goodWithDogs)
+          AND (:goodWithCats IS NULL OR a.good_with_cats = :goodWithCats)
+          AND (a.status IS NULL OR UPPER(a.status) = 'AVAILABLE')
+          AND ST_DWithin(
+                s.location::geography,
+                ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+                (:radiusMiles * 1609.344)
+          )
+        ORDER BY ST_Distance(
+                s.location::geography,
+                ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography
+        ) ASC
+        """,
+        countQuery = """
+        SELECT count(a.id) FROM animal_profiles a
+        INNER JOIN shelters s ON a.shelter_id = s.id
+        WHERE s.location IS NOT NULL
+          AND (:species IS NULL OR LOWER(a.species) = LOWER(:species))
+          AND (:gender IS NULL OR UPPER(a.gender) = UPPER(:gender))
+          AND (:size IS NULL OR LOWER(a.size) = LOWER(:size))
+          AND (:breed IS NULL OR LOWER(a.breed) LIKE LOWER(CONCAT('%', :breed, '%')))
+          AND (:name IS NULL OR LOWER(a.name) LIKE LOWER(CONCAT('%', :name, '%')))
+          AND (:goodWithKids IS NULL OR a.good_with_kids = :goodWithKids)
+          AND (:goodWithDogs IS NULL OR a.good_with_dogs = :goodWithDogs)
+          AND (:goodWithCats IS NULL OR a.good_with_cats = :goodWithCats)
+          AND (a.status IS NULL OR UPPER(a.status) = 'AVAILABLE')
+          AND ST_DWithin(
+                s.location::geography,
+                ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+                (:radiusMiles * 1609.344)
+          )
+        """,
+        nativeQuery = true)
+    Page<AnimalProfile> findNearbyWithFilters(
+            @Param("lat") double lat,
+            @Param("lon") double lon,
+            @Param("radiusMiles") double radiusMiles,
+            @Param("species") String species,
+            @Param("gender") String gender,
+            @Param("size") String size,
+            @Param("breed") String breed,
+            @Param("name") String name,
+            @Param("goodWithKids") Boolean goodWithKids,
+            @Param("goodWithDogs") Boolean goodWithDogs,
+            @Param("goodWithCats") Boolean goodWithCats,
+            Pageable pageable
+    );
+
+    // 2. Any Distance Proximity Sort (Nearest pets first)
+    @Query(value = """
+        SELECT a.* FROM animal_profiles a
+        LEFT JOIN shelters s ON a.shelter_id = s.id
+        WHERE (:species IS NULL OR LOWER(a.species) = LOWER(:species))
+          AND (:gender IS NULL OR UPPER(a.gender) = UPPER(:gender))
+          AND (:size IS NULL OR LOWER(a.size) = LOWER(:size))
+          AND (:breed IS NULL OR LOWER(a.breed) LIKE LOWER(CONCAT('%', :breed, '%')))
+          AND (:name IS NULL OR LOWER(a.name) LIKE LOWER(CONCAT('%', :name, '%')))
+          AND (:goodWithKids IS NULL OR a.good_with_kids = :goodWithKids)
+          AND (:goodWithDogs IS NULL OR a.good_with_dogs = :goodWithDogs)
+          AND (:goodWithCats IS NULL OR a.good_with_cats = :goodWithCats)
+          AND (a.status IS NULL OR UPPER(a.status) = 'AVAILABLE')
+        ORDER BY 
+          CASE WHEN s.location IS NOT NULL THEN
+            ST_Distance(s.location::geography, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography)
+          ELSE 99999999 END ASC,
+          a.id DESC
+        """,
+        countQuery = """
+        SELECT count(a.id) FROM animal_profiles a
+        LEFT JOIN shelters s ON a.shelter_id = s.id
+        WHERE (:species IS NULL OR LOWER(a.species) = LOWER(:species))
+          AND (:gender IS NULL OR UPPER(a.gender) = UPPER(:gender))
+          AND (:size IS NULL OR LOWER(a.size) = LOWER(:size))
+          AND (:breed IS NULL OR LOWER(a.breed) LIKE LOWER(CONCAT('%', :breed, '%')))
+          AND (:name IS NULL OR LOWER(a.name) LIKE LOWER(CONCAT('%', :name, '%')))
+          AND (:goodWithKids IS NULL OR a.good_with_kids = :goodWithKids)
+          AND (:goodWithDogs IS NULL OR a.good_with_dogs = :goodWithDogs)
+          AND (:goodWithCats IS NULL OR a.good_with_cats = :goodWithCats)
+          AND (a.status IS NULL OR UPPER(a.status) = 'AVAILABLE')
+        """,
+        nativeQuery = true)
+    Page<AnimalProfile> findAllSortedByDistance(
+            @Param("lat") double lat,
+            @Param("lon") double lon,
+            @Param("species") String species,
+            @Param("gender") String gender,
+            @Param("size") String size,
+            @Param("breed") String breed,
+            @Param("name") String name,
+            @Param("goodWithKids") Boolean goodWithKids,
+            @Param("goodWithDogs") Boolean goodWithDogs,
+            @Param("goodWithCats") Boolean goodWithCats,
+            Pageable pageable
     );
 }
 === FILE: src/main/java/com/htabler0405/adoptme/repositories/UserRepository.java ===
@@ -856,61 +1128,6 @@ public class ErrorResponse {
     public String getMessage() { return message; }
     public LocalDateTime getTimestamp() { return timestamp; }
 }
-=== FILE: src/main/java/com/htabler0405/adoptme/components/ShelterDatabaseInitializer.java ===
-package com.htabler0405.adoptme.components;
-
-import com.htabler0405.adoptme.entities.Shelter;
-import com.htabler0405.adoptme.repositories.AnimalShelterRepository;
-import com.htabler0405.adoptme.sources.SourceType;
-
-import org.locationtech.jts.geom.Coordinate;
-import org.locationtech.jts.geom.GeometryFactory;
-import org.locationtech.jts.geom.Point;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.stereotype.Component;
-
-@Component
-public class ShelterDatabaseInitializer implements CommandLineRunner {
-
-    private final AnimalShelterRepository shelterRepository;
-    private final GeometryFactory geometryFactory;
-
-    public ShelterDatabaseInitializer(AnimalShelterRepository shelterRepository, GeometryFactory geometryFactory) {
-        this.shelterRepository = shelterRepository;
-        this.geometryFactory = geometryFactory;
-    }
-
-    @Override
-    public void run(String... args) {
-        if (shelterRepository.count() == 0) {
-            // 1. Berkeley County Humane Society
-            Point loc1 = geometryFactory.createPoint(new Coordinate(-77.9482, 39.4312));
-            Shelter s1 = new Shelter();
-            s1.setName("Berkeley County Humane Society");
-            s1.setAddress("554 Charles Town Rd, Martinsburg, WV");
-            s1.setZipCode("25405");
-            s1.setPhoneNumber("304-267-8389");
-            s1.setEmail("berkeleycountyhumanesociety@gmail.com");
-            s1.setWebsiteUrl("https://berkeley.wvhumane.com");
-            s1.setSourcetype(SourceType.SHELTER);
-            s1.setLocation(loc1);
-            shelterRepository.save(s1);
-
-            // 2. Animal Welfare Society of Jefferson County
-            Point loc2 = geometryFactory.createPoint(new Coordinate(-77.8597, 39.3498));
-            Shelter s2 = new Shelter();
-            s2.setName("Animal Welfare Society of Jefferson County");
-            s2.setAddress("23 Poor Farm Rd, Kearneysville, WV");
-            s2.setZipCode("25430");
-            s2.setPhoneNumber("304-725-0589");
-            s2.setEmail("awsmanager@awsjc.org");
-            s2.setWebsiteUrl("https://www.awsjc.org");
-            s2.setSourcetype(SourceType.SHELTER);
-            s2.setLocation(loc2);
-            shelterRepository.save(s2);
-        }
-    }
-}
 === FILE: src/main/java/com/htabler0405/adoptme/sources/SourceType.java ===
 package com.htabler0405.adoptme.sources;
 
@@ -927,7 +1144,11 @@ package com.htabler0405.adoptme;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
+@EnableScheduling
+@EnableAsync
 @SpringBootApplication
 public class AdoptmeApplication {
 
@@ -1100,41 +1321,43 @@ public class ShelterController {
 === FILE: src/main/java/com/htabler0405/adoptme/controllers/AdminIngestionController.java ===
 package com.htabler0405.adoptme.controllers;
 
-import com.htabler0405.adoptme.entities.Shelter;
-import com.htabler0405.adoptme.repositories.AnimalShelterRepository;
-import com.htabler0405.adoptme.services.scraper.AnimalScraperService;
+import com.htabler0405.adoptme.services.RescueGroupsSyncService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.Map;
+
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
 @RequestMapping("/api/admin/ingest")
 public class AdminIngestionController {
 
-    private final AnimalScraperService animalScraperService;
-    private final AnimalShelterRepository shelterRepository;
+    private final RescueGroupsSyncService rescueGroupsSyncService;
 
-    public AdminIngestionController(AnimalScraperService animalScraperService,
-                                  AnimalShelterRepository shelterRepository) {
-        this.animalScraperService = animalScraperService;
-        this.shelterRepository = shelterRepository;
-    }
+    public AdminIngestionController(
+            RescueGroupsSyncService rescueGroupsSyncService) {
+        this.rescueGroupsSyncService = rescueGroupsSyncService;
+            }
+    /**
+     * Synchronizes live animal and organization data from the RescueGroups v5 API.
+     */
+    @PostMapping("/rescuegroups/sync")
+    public ResponseEntity<Map<String, Object>> triggerRescueGroupsSync(
+            @RequestParam(defaultValue = "25405") String zipCode,
+            @RequestParam(defaultValue = "50") int radiusMiles) {
 
-    @PostMapping("/scrape")
-    public ResponseEntity<Map<String, Object>> triggerScrapeAll() {
-        List<Shelter> shelters = shelterRepository.findAll();
-        for (Shelter shelter : shelters) {
-            animalScraperService.scrapeAnimalsForShelter(shelter);
-        }
+        int syncedCount = rescueGroupsSyncService.syncAnimalsNearZip(zipCode, radiusMiles);
+
         return ResponseEntity.ok(Map.of(
                 "status", "success",
-                "message", "Scrape completed for all registered shelters",
-                "sheltersProcessed", shelters.size()
+                "message", "RescueGroups sync completed successfully",
+                "zipCode", zipCode,
+                "radiusMiles", radiusMiles,
+                "animalsSynced", syncedCount
         ));
     }
 }
@@ -1378,178 +1601,6 @@ public class GeocodingService {
             log.error("Could not geocode address: {}. Error: {}", addressOrZip, e.getMessage());
         }
         return null;
-    }
-}
-=== FILE: src/main/java/com/htabler0405/adoptme/services/scraper/AnimalScraperService.java ===
-package com.htabler0405.adoptme.services.scraper;
-
-import com.htabler0405.adoptme.entities.AnimalProfile;
-import com.htabler0405.adoptme.entities.Shelter;
-import com.htabler0405.adoptme.repositories.AnimalProfileRepository;
-import lombok.extern.slf4j.Slf4j;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.io.IOException;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-
-@Slf4j
-@Service
-public class AnimalScraperService {
-
-    private final AnimalProfileRepository animalRepository;
-
-    public AnimalScraperService(AnimalProfileRepository animalRepository) {
-        this.animalRepository = animalRepository;
-    }
-
-    @Transactional
-    public void scrapeAnimalsForShelter(Shelter shelter) {
-        List<String> urlsToScrape = determineListingUrls(shelter);
-        log.info("Starting live public web scrape for shelter '{}' across {} target URLs", shelter.getName(), urlsToScrape.size());
-
-        for (String url : urlsToScrape) {
-            scrapePage(url, shelter);
-        }
-    }
-
-    private List<String> determineListingUrls(Shelter shelter) {
-        List<String> urls = new ArrayList<>();
-        String name = shelter.getName().toLowerCase();
-
-        if (name.contains("jefferson") || shelter.getWebsiteUrl().contains("awsjc.org")) {
-            // Corrected AWSJC URLs
-            urls.add("https://www.awsjc.org/adopt-a-dog");
-            urls.add("https://www.awsjc.org/adopt-a-cat");
-        } else if (name.contains("berkeley") || shelter.getWebsiteUrl().contains("berkeley.wvhumane.com")) {
-            // Corrected Berkeley County URL
-            urls.add("https://berkeley.wvhumane.com/adopt-a-friend/");
-        } else if (shelter.getWebsiteUrl() != null && !shelter.getWebsiteUrl().isBlank()) {
-            urls.add(shelter.getWebsiteUrl());
-        }
-
-        return urls;
-    }
-
-    private void scrapePage(String url, Shelter shelter) {
-        log.info("Fetching public HTML from: {}", url);
-        try {
-            Document doc = Jsoup.connect(url)
-                    .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 AdoptMeApp/1.0 (Public Animal Rescue Indexer)")
-                    .timeout(15000)
-                    .get();
-
-            // Broad selector targeting pet cards, image blocks, summary items, and articles
-            Elements petBlocks = doc.select(".summary-item, article, .sqs-block-image, .pet-card, .animal-card, .entry-content .wp-block-image, div[class*='pet-item']");
-            log.info("Found {} candidate blocks on {}", petBlocks.size(), url);
-
-            int savedCount = 0;
-            for (Element block : petBlocks) {
-                // 1. Extract Name
-                Element titleEl = block.selectFirst("h1, h2, h3, h4, .summary-title, .image-title, .pet-name, a.summary-title-link");
-                String petName = "";
-                if (titleEl != null) {
-                    petName = titleEl.text().trim();
-                }
-
-                // If no heading, check image alt attribute
-                if (petName.isBlank()) {
-                    Element imgEl = block.selectFirst("img");
-                    if (imgEl != null && imgEl.hasAttr("alt")) {
-                        petName = imgEl.attr("alt").trim();
-                    }
-                }
-
-                // Clean name and skip non-pet generic elements
-                petName = sanitizePetName(petName);
-                if (petName.isBlank() || petName.length() > 30) {
-                    continue;
-                }
-
-                // 2. Extract Image URL
-                Element imgEl = block.selectFirst("img");
-                String imageUrl = "";
-                if (imgEl != null) {
-                    imageUrl = imgEl.hasAttr("data-src") ? imgEl.attr("data-src") : imgEl.attr("abs:src");
-                    if (imageUrl.isBlank()) {
-                        imageUrl = imgEl.attr("src");
-                    }
-                }
-
-                // 3. Extract Description
-                Element descEl = block.selectFirst(".summary-excerpt, .description, p, .entry-summary");
-                String description = (descEl != null && !descEl.text().isBlank())
-                        ? descEl.text().trim()
-                        : "Available for adoption at " + shelter.getName() + ". Visit " + url + " for adoption application details.";
-
-                // 4. Determine Species & Gender
-                String species = url.toLowerCase().contains("cat") ? "Cat" : "Dog";
-                String gender = inferGender(petName + " " + description);
-
-                // 5. Unique Source URL
-                Element linkEl = block.selectFirst("a[href]");
-                String sourceUrl = (linkEl != null && !linkEl.absUrl("href").isBlank())
-                        ? linkEl.absUrl("href")
-                        : url + "#" + petName.toLowerCase().replaceAll("[^a-z0-9]", "-");
-
-                // 6. Save or Update in PostgreSQL
-                AnimalProfile profile = animalRepository.findBySourceUrl(sourceUrl)
-                        .orElseGet(() -> {
-                            AnimalProfile p = new AnimalProfile();
-                            p.setSourceUrl(sourceUrl);
-                            p.setShelter(shelter);
-                            return p;
-                        });
-
-                profile.setName(petName);
-                profile.setSpecies(species);
-                profile.setBreed("Mixed Breed");
-                profile.setGender(gender);
-                profile.setAge("Adult");
-                profile.setSize("Medium");
-                if (!imageUrl.isBlank()) {
-                    profile.setImageUrl(imageUrl);
-                }
-                profile.setDescription(description);
-                profile.setStatus("AVAILABLE");
-                profile.setHypoallergenic(false);
-                profile.setLastSeenAt(LocalDateTime.now());
-
-                animalRepository.save(profile);
-                savedCount++;
-                log.info("Saved live scraped animal: '{}' ({}) from {}", petName, species, shelter.getName());
-            }
-
-            log.info("Finished parsing {}: persisted {} live animal profiles.", url, savedCount);
-
-        } catch (IOException e) {
-            log.error("Failed to scrape live HTML from {}: {}", url, e.getMessage());
-        }
-    }
-
-    private String sanitizePetName(String raw) {
-        if (raw == null) return "";
-        String cleaned = raw.replaceAll("(?i)(adoptable|available|featured|dog|cat|for adoption|meet|\\|)", "").trim();
-        if (cleaned.equalsIgnoreCase("donate") || cleaned.equalsIgnoreCase("foster") || cleaned.equalsIgnoreCase("home")) {
-            return "";
-        }
-        return cleaned;
-    }
-
-    private String inferGender(String text) {
-        String upper = text.toUpperCase();
-        if (upper.contains(" FEMALE ") || upper.contains(" SHE ") || upper.contains(" HER ") || upper.contains(" GIRL ")) {
-            return "FEMALE";
-        } else if (upper.contains(" MALE ") || upper.contains(" HE ") || upper.contains(" HIM ") || upper.contains(" BOY ")) {
-            return "MALE";
-        }
-        return "UNKNOWN";
     }
 }
 === FILE: src/main/java/com/htabler0405/adoptme/services/JwtService.java ===
@@ -1799,6 +1850,362 @@ public class UserAccountOptionsService {
     }
 }
 
+=== FILE: src/main/java/com/htabler0405/adoptme/services/RescueGroupsSyncService.java ===
+package com.htabler0405.adoptme.services;
+
+import com.htabler0405.adoptme.dto.rescuegroups.RescueGroupsResponseDto;
+import com.htabler0405.adoptme.dto.rescuegroups.RescueGroupsResponseDto.RescueGroupsAnimalData;
+import com.htabler0405.adoptme.dto.rescuegroups.RescueGroupsResponseDto.RescueGroupsIncludedItem;
+import com.htabler0405.adoptme.entities.AnimalProfile;
+import com.htabler0405.adoptme.entities.Shelter;
+import com.htabler0405.adoptme.repositories.AnimalProfileRepository;
+import com.htabler0405.adoptme.repositories.AnimalShelterRepository;
+import com.htabler0405.adoptme.sources.SourceType;
+import lombok.extern.slf4j.Slf4j;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClient;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+public class RescueGroupsSyncService {
+
+    private final RestClient rescueGroupsRestClient;
+    private final AnimalShelterRepository shelterRepository;
+    private final AnimalProfileRepository animalRepository;
+    private final GeometryFactory geometryFactory;
+
+    // Comprehensive major US metropolitan hubs covering all population centers
+    private static final List<String> REGIONAL_HUBS = List.of(
+            // Mid-Atlantic & Capital Region
+            "20001", // Washington, DC
+            "21201", // Baltimore, MD
+            "25405", // Martinsburg, WV / Eastern Panhandle
+            "19102", // Philadelphia, PA
+            "15201", // Pittsburgh, PA
+
+            // Northeast & New England
+            "10001", // New York, NY
+            "02108", // Boston, MA
+
+            // Southeast & Florida
+            "30301", // Atlanta, GA
+            "33101", // Miami, FL
+            "32801", // Orlando, FL
+            "28202", // Charlotte, NC
+            "37201", // Nashville, TN
+
+            // Midwest & Great Lakes
+            "60601", // Chicago, IL
+            "48226", // Detroit, MI
+            "43215", // Columbus, OH
+            "55401", // Minneapolis, MN
+            "63101", // St. Louis, MO
+            "64101", // Kansas City, MO
+
+            // South & Texas
+            "75201", // Dallas / Fort Worth, TX
+            "77002", // Houston, TX
+            "78701", // Austin, TX
+            "70112", // New Orleans, LA
+
+            // Mountain West & Southwest
+            "80201", // Denver, CO
+            "85001", // Phoenix, AZ
+            "89101", // Las Vegas, NV
+            "84101", // Salt Lake City, UT
+
+            // West Coast & Pacific Northwest
+            "90001", // Los Angeles, CA
+            "94102", // San Francisco / Bay Area, CA
+            "92101", // San Diego, CA
+            "98101", // Seattle, WA
+            "97201"  // Portland, OR
+    );
+
+    public RescueGroupsSyncService(
+            RestClient rescueGroupsRestClient,
+            AnimalShelterRepository shelterRepository,
+            AnimalProfileRepository animalRepository,
+            GeometryFactory geometryFactory) {
+        this.rescueGroupsRestClient = rescueGroupsRestClient;
+        this.shelterRepository = shelterRepository;
+        this.animalRepository = animalRepository;
+        this.geometryFactory = geometryFactory;
+    }
+
+    @Async
+    public CompletableFuture<Integer> syncNationwideDatabase() {
+        log.info("Starting Comprehensive Nationwide Ingestion across {} major metro hubs...", REGIONAL_HUBS.size());
+        int grandTotal = 0;
+        
+        for (String hubZip : REGIONAL_HUBS) {
+            try {
+                // Fetch up to 5 pages per metro hub (500 animals per metro area)
+                int count = syncAnimalsNearZip(hubZip, 75, 5);
+                grandTotal += count;
+                log.info("Hub {} sync complete (+{} pets). Running total: {}", hubZip, count, grandTotal);
+                Thread.sleep(300); // Polite rate-limiting between hubs
+            } catch (Exception e) {
+                log.error("Failed syncing hub {}: {}", hubZip, e.getMessage());
+            }
+        }
+        
+        log.info("Comprehensive Nationwide Ingestion complete! Total records saved/updated: {}", grandTotal);
+        return CompletableFuture.completedFuture(grandTotal);
+    }
+
+    // 2-argument overload default
+    @Transactional
+    public int syncAnimalsNearZip(String postalCode, int distanceMiles) {
+        return syncAnimalsNearZip(postalCode, distanceMiles, 10);
+    }
+
+    // 3-argument execution
+    @Transactional
+    public int syncAnimalsNearZip(String postalCode, int distanceMiles, int maxPages) {
+        log.info("Starting RescueGroups sync near {} ({} mi, up to {} pages)...", postalCode, distanceMiles, maxPages);
+
+        int totalSaved = 0;
+
+        for (int page = 1; page <= maxPages; page++) {
+            final int currentPage = page;
+
+            RescueGroupsResponseDto response;
+            try {
+                response = rescueGroupsRestClient.get()
+                        .uri(uriBuilder -> uriBuilder
+                                .path("/public/animals/search/available")
+                                .queryParam("include", "orgs,pictures")
+                                .queryParam("location", postalCode)
+                                .queryParam("distance", distanceMiles)
+                                .queryParam("limit", 100)
+                                .queryParam("page", currentPage)
+                                .build())
+                        .retrieve()
+                        .body(RescueGroupsResponseDto.class);
+            } catch (Exception e) {
+                log.error("Failed querying RescueGroups page {}: {}", currentPage, e.getMessage());
+                break;
+            }
+
+            if (response == null || response.data() == null || response.data().isEmpty()) {
+                break;
+            }
+
+            @SuppressWarnings("null")
+            Map<String, RescueGroupsIncludedItem> includedMap = Optional.ofNullable(response.included())
+                    .orElse(Collections.emptyList())
+                    .stream()
+                    .collect(Collectors.toMap(RescueGroupsIncludedItem::id, Function.identity(), (a, b) -> a));
+
+            Map<String, Shelter> shelterCache = new HashMap<>();
+
+            for (RescueGroupsIncludedItem item : includedMap.values()) {
+                if ("orgs".equalsIgnoreCase(item.type()) || "organizations".equalsIgnoreCase(item.type())) {
+                    try {
+                        Long orgId = Long.parseLong(item.id());
+                        Shelter shelter = shelterRepository.findByRescuegroupsOrgId(orgId)
+                                .orElseGet(() -> {
+                                    Shelter s = new Shelter();
+                                    s.setRescuegroupsOrgId(orgId);
+                                    s.setSourcetype(SourceType.SHELTER);
+                                    return s;
+                                });
+
+                        var attr = item.attributes();
+                        shelter.setName(attr.name() != null ? attr.name() : "Rescue Partner");
+                        shelter.setEmail(attr.email());
+                        shelter.setPhoneNumber(attr.phone());
+
+                        String street = attr.street() != null ? attr.street().trim() : "";
+                        String city = attr.city() != null ? attr.city().trim() : "";
+                        String state = attr.state() != null ? attr.state().trim() : "";
+                        String zip = attr.postalcode() != null ? attr.postalcode().trim() : postalCode;
+
+                        StringBuilder addressBuilder = new StringBuilder();
+                        if (!street.isEmpty()) addressBuilder.append(street).append(", ");
+                        if (!city.isEmpty()) addressBuilder.append(city).append(", ");
+                        if (!state.isEmpty()) addressBuilder.append(state).append(" ");
+                        if (!zip.isEmpty()) addressBuilder.append(zip);
+
+                        String finalAddress = addressBuilder.toString().trim();
+                        shelter.setAddress(!finalAddress.isEmpty() ? finalAddress : (city.isEmpty() ? "Regional Foster Network" : city + ", " + state));
+                        shelter.setZipCode(zip);
+                        shelter.setWebsiteUrl(attr.url());
+                        shelter.setAdoptionListingsUrl(attr.url());
+
+                        if (attr.lat() != null && attr.lon() != null) {
+                            double lat = attr.lat();
+                            double lon = attr.lon();
+                            double realLat = (Math.abs(lat) <= 90.0) ? lat : lon;
+                            double realLon = (Math.abs(lon) > 90.0 || lon < 0) ? lon : lat;
+                            shelter.setLocation(geometryFactory.createPoint(new Coordinate(realLon, realLat)));
+                        }
+
+                        shelterCache.put(item.id(), shelterRepository.save(shelter));
+                    } catch (Exception e) {
+                        log.error("Failed to persist shelter org ID {}: {}", item.id(), e.getMessage());
+                    }
+                }
+            }
+
+            int pageSaved = 0;
+            for (RescueGroupsAnimalData animalData : response.data()) {
+                try {
+                    Long petId = Long.parseLong(animalData.id());
+                    var attr = animalData.attributes();
+
+                    AnimalProfile profile = animalRepository.findByRescuegroupsPetId(petId)
+                            .orElseGet(() -> {
+                                AnimalProfile p = new AnimalProfile();
+                                p.setRescuegroupsPetId(petId);
+                                p.setSourceUrl("https://rescuegroups.org/pet/" + petId);
+                                return p;
+                            });
+
+                    Shelter shelter = null;
+                    if (animalData.relationships() != null &&
+                        animalData.relationships().orgs() != null &&
+                        !animalData.relationships().orgs().data().isEmpty()) {
+                        String orgId = animalData.relationships().orgs().data().get(0).id();
+                        shelter = shelterCache.get(orgId);
+                    }
+
+                    if (shelter == null) continue;
+
+                    profile.setShelter(shelter);
+                    profile.setName(attr.name() != null ? attr.name() : "Adoptable Pet");
+                    profile.setBreed(attr.breedString() != null ? attr.breedString() : (attr.breedPrimary() != null ? attr.breedPrimary() : "Mixed Breed"));
+                    profile.setSpecies(detectSpecies(attr.species(), profile.getBreed()));
+                    profile.setGender(attr.sex() != null ? attr.sex().toUpperCase() : "UNKNOWN");
+                    profile.setAge(attr.ageGroup() != null ? attr.ageGroup() : (attr.ageString() != null ? attr.ageString() : "Adult"));
+                    profile.setSize(attr.sizeGroup() != null ? attr.sizeGroup() : "Medium");
+                    profile.setDescription(attr.descriptionText() != null ? attr.descriptionText() : attr.descriptionHtml());
+                    profile.setStatus("AVAILABLE");
+                    profile.setHypoallergenic(Boolean.TRUE.equals(attr.hypoallergenic()));
+                    profile.setGoodWithKids(attr.goodWithKids());
+                    profile.setGoodWithDogs(attr.goodWithDogs());
+                    profile.setGoodWithCats(attr.goodWithCats());
+                    profile.setLastSeenAt(LocalDateTime.now());
+
+                    if (attr.adoptionFeeString() != null) {
+                        try {
+                            String cleanPrice = attr.adoptionFeeString().replaceAll("[^0-9.]", "");
+                            if (!cleanPrice.isEmpty()) {
+                                profile.setAdoptionFee(new BigDecimal(cleanPrice));
+                            }
+                        } catch (Exception ignored) {}
+                    }
+
+                    if (animalData.relationships() != null &&
+                        animalData.relationships().pictures() != null &&
+                        !animalData.relationships().pictures().data().isEmpty()) {
+                        String picId = animalData.relationships().pictures().data().get(0).id();
+                        RescueGroupsIncludedItem picItem = includedMap.get(picId);
+                        if (picItem != null && picItem.attributes() != null) {
+                            String imgUrl = extractPictureUrl(picItem.attributes());
+                            if (imgUrl != null) {
+                                profile.setImageUrl(imgUrl);
+                            }
+                        }
+                    }
+
+                    animalRepository.save(profile);
+                    pageSaved++;
+                } catch (Exception e) {
+                    log.error("Failed to sync animal ID {}: {}", animalData.id(), e.getMessage());
+                }
+            }
+
+            totalSaved += pageSaved;
+
+            if (response.data().size() < 100) break;
+
+            try {
+                Thread.sleep(150);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        return totalSaved;
+    }
+
+    private String detectSpecies(String rawSpecies, String breed) {
+        String s = (rawSpecies != null ? rawSpecies.trim().toLowerCase() : "");
+        String b = (breed != null ? breed.trim().toLowerCase() : "");
+        String combined = (s + " " + b).trim();
+
+        if (s.equals("dog") || s.equals("dogs") || s.equals("canine")) return "Dog";
+        if (s.equals("cat") || s.equals("cats") || s.equals("feline")) return "Cat";
+        if (s.equals("bird") || s.equals("birds") || s.equals("avian")) return "Bird";
+        if (s.equals("rabbit") || s.equals("rabbits")) return "Rabbit";
+        if (s.equals("horse") || s.equals("horses") || s.equals("equine")) return "Horse";
+        if (s.contains("small") || s.contains("furry") || s.equals("rodent")) return "Small & Furry";
+
+        if (combined.contains("dog") || combined.contains("canine") || combined.contains("shepherd") ||
+            combined.contains("poodle") || combined.contains("terrier") || combined.contains("retriever") ||
+            combined.contains("hound") || combined.contains("pyrenees") || combined.contains("husky") ||
+            combined.contains("collie") || combined.contains("sheepdog") || combined.contains("mastiff") ||
+            combined.contains("chihuahua") || combined.contains("pit bull") || combined.contains("bully") ||
+            combined.contains("bulldog") || combined.contains("beagle") || combined.contains("boxer") ||
+            combined.contains("rottweiler") || combined.contains("corgi") || combined.contains("dachshund") ||
+            combined.contains("spaniel") || combined.contains("great dane") || combined.contains("australian shepherd")) {
+            return "Dog";
+        }
+
+        if (combined.contains("cat") || combined.contains("feline") || combined.contains("kitten") ||
+            combined.contains("shorthair") || combined.contains("longhair") || combined.contains("siamese") ||
+            combined.contains("tabby") || combined.contains("persian") || combined.contains("maine coon")) {
+            return "Cat";
+        }
+
+        if (combined.contains("bird") || combined.contains("pigeon") || combined.contains("dove") ||
+            combined.contains("parrot") || combined.contains("parakeet") || combined.contains("cockatiel")) {
+            return "Bird";
+        }
+
+        if (combined.contains("rabbit") || combined.contains("bunny") || combined.contains("lop")) {
+            return "Rabbit";
+        }
+
+        if (combined.contains("guinea pig") || combined.contains("hamster") || combined.contains("ferret") ||
+            combined.contains("chinchilla") || combined.contains("hedgehog") || combined.contains("gerbil")) {
+            return "Small & Furry";
+        }
+
+        if (combined.contains("horse") || combined.contains("equine") || combined.contains("pony")) {
+            return "Horse";
+        }
+
+        if (rawSpecies != null && !rawSpecies.isBlank()) {
+            return rawSpecies.substring(0, 1).toUpperCase() + rawSpecies.substring(1).toLowerCase();
+        }
+
+        return "Dog";
+    }
+
+    private String extractPictureUrl(RescueGroupsIncludedItem.IncludedAttributes attr) {
+        if (attr.large() != null && attr.large().get("url") != null) {
+            return attr.large().get("url").toString();
+        }
+        if (attr.original() != null && attr.original().get("url") != null) {
+            return attr.original().get("url").toString();
+        }
+        return null;
+    }
+}
 === FILE: src/main/java/com/htabler0405/adoptme/services/AnimalQueryService.java ===
 package com.htabler0405.adoptme.services;
 
@@ -1808,14 +2215,13 @@ import com.htabler0405.adoptme.repositories.AnimalProfileRepository;
 import jakarta.persistence.criteria.Predicate;
 import org.locationtech.jts.geom.Point;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -1832,6 +2238,59 @@ public class AnimalQueryService {
 
     @Transactional(readOnly = true)
     public Page<AnimalProfile> filterAnimals(AnimalFilterRequest filter, Pageable pageable) {
+        Double userLat = filter.getLatitude();
+        Double userLng = filter.getLongitude();
+
+        // Fallback geocode only if coordinates are missing and ZIP is valid (5 digits)
+        if ((userLat == null || userLng == null) && (filter.getZipCode() != null && filter.getZipCode().trim().length() == 5)) {
+            Point userPoint = geocodingService.getCoordinatesFromAddressOrZip(filter.getZipCode());
+            if (userPoint != null) {
+                double val1 = userPoint.getCoordinate().x;
+                double val2 = userPoint.getCoordinate().y;
+                userLat = (val1 > 0) ? val1 : val2;
+                userLng = (val1 < 0) ? val1 : val2;
+            }
+        }
+
+        // Clean unpaged sort so Spring Data doesn't append a second "ORDER BY" clause
+        Pageable cleanPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+
+        // 1. Strict Radius Search (PostGIS ST_DWithin + ST_Distance)
+        if (userLat != null && userLng != null && filter.getRadiusMiles() != null && filter.getRadiusMiles() > 0) {
+            return animalRepository.findNearbyWithFilters(
+                    userLat,
+                    userLng,
+                    filter.getRadiusMiles(),
+                    emptyToNull(filter.getSpecies()),
+                    emptyToNull(filter.getGender()),
+                    emptyToNull(filter.getSize()),
+                    emptyToNull(filter.getBreed()),
+                    emptyToNull(filter.getName()),
+                    filter.getGoodWithKids(),
+                    filter.getGoodWithDogs(),
+                    filter.getGoodWithCats(),
+                    cleanPageable
+            );
+        }
+
+        // 2. Any Distance with user coordinates (PostGIS ST_Distance proximity sorting)
+        if (userLat != null && userLng != null) {
+            return animalRepository.findAllSortedByDistance(
+                    userLat,
+                    userLng,
+                    emptyToNull(filter.getSpecies()),
+                    emptyToNull(filter.getGender()),
+                    emptyToNull(filter.getSize()),
+                    emptyToNull(filter.getBreed()),
+                    emptyToNull(filter.getName()),
+                    filter.getGoodWithKids(),
+                    filter.getGoodWithDogs(),
+                    filter.getGoodWithCats(),
+                    cleanPageable
+            );
+        }
+
+        // 3. Fallback specification when no coordinates exist
         Specification<AnimalProfile> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -1841,54 +2300,26 @@ public class AnimalQueryService {
             if (filter.getGender() != null && !filter.getGender().isBlank()) {
                 predicates.add(cb.equal(cb.upper(root.get("gender")), filter.getGender().toUpperCase()));
             }
-            if (filter.getAge() != null && !filter.getAge().isBlank()) {
-                predicates.add(cb.equal(cb.lower(root.get("age")), filter.getAge().toLowerCase()));
+            if (filter.getSize() != null && !filter.getSize().isBlank()) {
+                predicates.add(cb.equal(cb.lower(root.get("size")), filter.getSize().toLowerCase()));
             }
             if (filter.getBreed() != null && !filter.getBreed().isBlank()) {
                 predicates.add(cb.like(cb.lower(root.get("breed")), "%" + filter.getBreed().toLowerCase() + "%"));
             }
-            if (filter.getSize() != null && !filter.getSize().isBlank()) {
-                predicates.add(cb.equal(cb.lower(root.get("size")), filter.getSize().toLowerCase()));
+            if (filter.getName() != null && !filter.getName().isBlank()) {
+                predicates.add(cb.like(cb.lower(root.get("name")), "%" + filter.getName().toLowerCase() + "%"));
             }
-            if (filter.getColor() != null && !filter.getColor().isBlank()) {
-                predicates.add(cb.equal(cb.lower(root.get("color")), filter.getColor().toLowerCase()));
-            }        
-            if (filter.getSourceType() != null) {
-                predicates.add(cb.equal(root.join("shelter").get("sourcetype"), filter.getSourceType()));            
-            }
-            if (filter.getHypoallergenic() != null) {
-                predicates.add(cb.equal(root.get("hypoallergenic"), filter.getHypoallergenic()));          
-            }
-            
+            if (Boolean.TRUE.equals(filter.getGoodWithKids())) predicates.add(cb.isTrue(root.get("goodWithKids")));
+            if (Boolean.TRUE.equals(filter.getGoodWithDogs())) predicates.add(cb.isTrue(root.get("goodWithDogs")));
+            if (Boolean.TRUE.equals(filter.getGoodWithCats())) predicates.add(cb.isTrue(root.get("goodWithCats")));
+
+            predicates.add(cb.or(
+                    cb.isNull(root.get("status")),
+                    cb.equal(cb.upper(root.get("status")), "AVAILABLE")
+            ));
+
             return cb.and(predicates.toArray(new Predicate[0]));
         };
-
-        Double userLat = filter.getLatitude();
-        Double userLng = filter.getLongitude();
-
-        if ((userLat == null || userLng == null) && (filter.getZipCode() != null && !filter.getZipCode().isBlank())) {
-            Point userPoint = geocodingService.getCoordinatesFromAddressOrZip(filter.getZipCode());
-            if (userPoint != null) {
-                userLng = userPoint.getCoordinate().x;
-                userLat = userPoint.getCoordinate().y;
-            }
-        }
-
-        if (userLat != null && userLng != null && filter.getRadiusMiles() != null) {
-            List<AnimalProfile> allMatches = animalRepository.findAll(spec);
-            double finalLat = userLat;
-            double finalLng = userLng;
-            double maxMiles = filter.getRadiusMiles();
-
-            List<AnimalProfile> filteredList = allMatches.stream()
-                    .filter(animal -> isWithinRadius(animal, finalLat, finalLng, maxMiles))
-                    .toList();
-            int start = (int) pageable.getOffset();
-            int end = Math.min((start + pageable.getPageSize()), filteredList.size());
-            
-            List<AnimalProfile> pageContent = (start <= end) ? filteredList.subList(start, end) : Collections.emptyList();
-            return new PageImpl<>(pageContent, pageable, filteredList.size());
-        }
 
         return animalRepository.findAll(spec, pageable);
     }
@@ -1898,27 +2329,8 @@ public class AnimalQueryService {
         return animalRepository.findById(animalId);
     }
 
-    private boolean isWithinRadius(AnimalProfile animal, double userLat, double userLng, double maxDistanceMiles) {
-        if (animal.getShelter() == null || animal.getShelter().getLocation() == null) {
-            return false;
-        }
-
-        Point shelterPoint = animal.getShelter().getLocation();        
-        double shelterLng = shelterPoint.getCoordinate().x;
-        double shelterLat = shelterPoint.getCoordinate().y;
-
-        double earthRadiusMiles = 3958.8;
-        double dLat = Math.toRadians(shelterLat - userLat);
-        double dLng = Math.toRadians(shelterLng - userLng);
-
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(Math.toRadians(userLat)) * Math.cos(Math.toRadians(shelterLat)) *
-                Math.sin(dLng / 2) * Math.sin(dLng / 2);
-
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        double distance = earthRadiusMiles * c;
-
-        return distance <= maxDistanceMiles;
+    private String emptyToNull(String val) {
+        return (val == null || val.trim().isEmpty()) ? null : val.trim();
     }
 }
 === FILE: src/main/java/com/htabler0405/adoptme/services/FeedbackService.java ===
@@ -2077,6 +2489,7 @@ public class Feedback {
 === FILE: src/main/java/com/htabler0405/adoptme/entities/AnimalProfile.java ===
 package com.htabler0405.adoptme.entities;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
@@ -2099,6 +2512,9 @@ public class AnimalProfile {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "rescuegroups_pet_id", unique = true)
+    private Long rescuegroupsPetId;
     
     @JsonBackReference
     @ManyToOne(fetch = FetchType.LAZY)
@@ -2122,6 +2538,9 @@ public class AnimalProfile {
 
     @Column(columnDefinition = "TEXT", length = 3000)
     private String description;
+
+    @Column(name = "adoption_fee")
+    private BigDecimal adoptionFee; 
 
     @Column(nullable = false)
     private String status = "AVAILABLE";
@@ -2194,6 +2613,7 @@ public class User {
 === FILE: src/main/java/com/htabler0405/adoptme/entities/Shelter.java ===
 package com.htabler0405.adoptme.entities;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -2229,8 +2649,14 @@ public class Shelter {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "rescuegroups_org_id", unique = true)
+    private Long rescuegroupsOrgId;
+
     @Column(nullable = false)
     private String name;
+
+    @Column(name = "default_adoption_fee")
+    private BigDecimal defaultAdoptionFee;
 
     @Enumerated(EnumType.STRING)
     private SourceType sourcetype;
