@@ -328,7 +328,8 @@ public class RescueGroupsSyncService {
             return "Bird";
         }
 
-        if (combined.contains("rabbit") || combined.contains("bunny") || combined.contains("lop")) {
+        if (combined.contains("rabbit") || combined.contains("bunny") || combined.contains("lop")||combined.contains("New Zealand (medium coat)")) {
+
             return "Rabbit";
         }
 
