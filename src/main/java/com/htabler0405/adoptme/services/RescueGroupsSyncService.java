@@ -313,8 +313,13 @@ public class RescueGroupsSyncService {
         }
 
         if (combined.contains("cat") || combined.contains("feline") || combined.contains("kitten") ||
-            combined.contains("shorthair") || combined.contains("longhair") || combined.contains("siamese") ||
-            combined.contains("tabby") || combined.contains("persian") || combined.contains("maine coon")) {
+            combined.contains("shorthair") || combined.contains("short hair") || 
+            combined.contains("longhair") || combined.contains("long hair") || 
+            combined.contains("siamese") || combined.contains("tabby") || 
+            combined.contains("persian") || combined.contains("maine coon") ||
+            combined.contains("tortoiseshell") || combined.contains("tuxedo") || 
+            combined.contains("calico") || combined.contains("domestic short") || 
+            combined.contains("domestic medium") || combined.contains("domestic long")) {
             return "Cat";
         }
 
